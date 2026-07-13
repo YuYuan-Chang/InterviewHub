@@ -17,4 +17,4 @@ RUN npm run build -w @interviewhub/shared \
 ENV NODE_ENV=production
 EXPOSE 4001
 # prisma db push is idempotent: it creates/updates the schema on boot, then the service starts.
-CMD ["sh", "-c", "until npx prisma migrate deploy --schema services/auth/prisma/schema.prisma; do echo 'database not ready, retrying in 3s'; sleep 3; done && node services/auth/dist/index.js"]
+CMD ["sh", "-c", "until npx prisma migrate deploy --schema services/auth/prisma/schema.prisma; do echo 'database not ready, retrying in 3s'; sleep 3; done && exec node services/auth/dist/index.js"]
