@@ -11,3 +11,4 @@ data:
   NOTIFICATION_SERVICE_URL: http://notification-service:4006
   S3_ENDPOINT: http://minio:9000
   S3_BUCKET: interviewhub-files
+  KAFKA_BROKERS: kafka:9092

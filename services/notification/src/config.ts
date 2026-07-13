@@ -6,4 +6,5 @@ export const config = {
   jwtPublicKey: decodeB64Env('JWT_PUBLIC_KEY_B64'),
   internalToken: requiredEnv('INTERNAL_TOKEN'),
   userServiceUrl: envOr('USER_SERVICE_URL', 'http://localhost:4002'),
+  kafkaBrokers: envOr('KAFKA_BROKERS', 'localhost:9092'),
 };

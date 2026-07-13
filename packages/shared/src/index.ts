@@ -10,3 +10,4 @@ export * from './logging';
 export * from './metrics';
 export * from './tracing';
 export * from './shutdown';
+export * from './events';

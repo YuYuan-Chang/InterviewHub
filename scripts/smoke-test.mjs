@@ -310,15 +310,26 @@ async function main() {
   check('comment count denormalized onto post', postAfter.data.commentCount === 2, `got ${postAfter.data.commentCount}`);
 
   console.log('— notifications');
-  await new Promise((r) => setTimeout(r, 800)); // fire-and-forget hooks are async
-  const bobNotifs = await api('/api/notifications', { token: bob.accessToken });
+  // events flow through Kafka now — poll until the consumer has delivered them
+  let bobNotifs;
+  let aliceNotifsPoll;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    [bobNotifs, aliceNotifsPoll] = await Promise.all([
+      api('/api/notifications', { token: bob.accessToken }),
+      api('/api/notifications', { token: alice.accessToken }),
+    ]);
+    const bobTypes = bobNotifs.data.items.map((n) => n.type);
+    const aliceTypes = aliceNotifsPoll.data.items.map((n) => n.type);
+    if (bobTypes.includes('new_follower') && bobTypes.includes('new_comment') && aliceTypes.includes('new_reply')) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   const types = bobNotifs.data.items.map((n) => n.type).sort();
   check(
     'bob notified of follow + comment',
     types.includes('new_follower') && types.includes('new_comment'),
     JSON.stringify(types),
   );
-  const aliceNotifs = await api('/api/notifications', { token: alice.accessToken });
+  const aliceNotifs = aliceNotifsPoll;
   check(
     'alice notified of reply',
     aliceNotifs.data.items.some((n) => n.type === 'new_reply'),

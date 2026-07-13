@@ -126,6 +126,18 @@ Every service emits structured JSON logs (pino), Prometheus metrics, and OpenTel
 
 On Kubernetes the pods carry `prometheus.io/*` scrape annotations (bring your own cluster Prometheus); tracing no-ops unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
 
+## Messaging (Kafka)
+
+Notifications flow through **Kafka** instead of fire-and-forget HTTP: comment-service and user-service publish `new_comment`/`new_reply`/`new_follower` events to the `interviewhub.notifications` topic (single-node KRaft broker, no ZooKeeper); notification-service consumes them (`groupId: notification-service`) and writes rows.
+
+- **Durable**: if notification-service is down, events wait in the topic and are delivered on recovery — under the old HTTP path they were silently lost.
+- **At-least-once**: a failing insert (e.g. DB down) leaves the offset uncommitted and the message is redelivered; duplicates are possible, losses are not.
+- **Fail-open producers**: a dead broker never breaks the user action — publish errors are logged and dropped (same guarantee as before, so Kafka is strictly an upgrade).
+- **DLQ**: unparseable messages go to `interviewhub.notifications.dlq` instead of wedging a partition.
+- **Keyed by recipient** for per-recipient ordering; events carry the `x-request-id`, and OTel's kafkajs instrumentation stitches producer → consumer into one trace.
+- The comment-count bump stays REST — it's synchronous counter state, not an event.
+- Next rigor step (not implemented): the **transactional outbox** pattern, which would make the DB write and the publish atomic.
+
 ## Operations notes
 
 - **Graceful shutdown** — services drain in-flight requests on SIGTERM, disconnect Prisma, flush traces, then exit; k8s pods add a `preStop` sleep so endpoint removal propagates first. Rolling deploys drop zero requests.

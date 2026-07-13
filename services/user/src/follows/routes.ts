@@ -6,18 +6,14 @@ import {
   clampLimit,
   decodeCursor,
   encodeCursor,
-  fireAndForget,
   parseQuery,
   requireAuth,
-  s2sClient,
   param,
 } from '@interviewhub/shared';
 import { prisma } from '../db';
 import { config } from '../config';
 import * as follows from './service';
-import { logger } from '../logger';
-
-const notificationService = s2sClient(config.notificationServiceUrl, config.internalToken);
+import { notifications } from '../events';
 
 const listQuery = z.object({ cursor: z.string().optional(), limit: z.coerce.number().optional() });
 
@@ -32,15 +28,12 @@ followsRouter.post('/api/users/:userId/follow', requireAuth(config.jwtPublicKey)
 
   const created = await follows.follow(viewer.id, target);
   if (created) {
-    fireAndForget(
-      notificationService.post('/internal/notifications', {
-        recipientId: target,
-        type: 'new_follower',
-        actorId: viewer.id,
-      }),
-      'new_follower notification',
-      logger,
-    );
+    // durable via Kafka; fail-open if the broker is down (publish never throws)
+    void notifications.publish({
+      type: 'new_follower',
+      recipientId: target,
+      actorId: viewer.id,
+    });
   }
   res.status(created ? 201 : 200).json(await follows.followCounts(target));
 });

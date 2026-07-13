@@ -14,10 +14,10 @@ import { prisma } from './db';
 import { config } from './config';
 import { buildTree } from './tree';
 import { logger } from './logger';
+import { notifications } from './events';
 
 const postService = s2sClient(config.postServiceUrl, config.internalToken);
 const userService = s2sClient(config.userServiceUrl, config.internalToken);
-const notificationService = s2sClient(config.notificationServiceUrl, config.internalToken);
 
 const createSchema = z.object({
   body: z.string().min(1).max(5000),
@@ -66,20 +66,18 @@ router.post(
       'bump comment count',
       logger,
     );
-    // Replies notify the parent-comment author; top-level comments notify the post author.
+    // Replies notify the parent-comment author; top-level comments notify the
+    // post author. Published to Kafka: durable if notification-service is down,
+    // fail-open if the broker is down (publish never throws).
     const recipientId = parent ? parent.authorId : post.authorId;
-    const type = parent ? 'new_reply' : 'new_comment';
-    fireAndForget(
-      notificationService.post('/internal/notifications', {
-        recipientId,
-        type,
-        actorId: user.id,
-        postId,
-        commentId: comment.id,
-      }),
-      `${type} notification`,
-      logger,
-    );
+    const type = parent ? ('new_reply' as const) : ('new_comment' as const);
+    void notifications.publish({
+      type,
+      recipientId,
+      actorId: user.id,
+      postId,
+      commentId: comment.id,
+    });
 
     res.status(201).json({ ...comment, viewerHasUpvoted: false, replies: [] });
   },

@@ -7,9 +7,7 @@ import {
   encodeCursor,
   parseQuery,
   requireAuth,
-  requireInternal,
   s2sClient,
-  validateBody,
   param,
 } from '@interviewhub/shared';
 import { prisma } from './db';
@@ -17,13 +15,8 @@ import { config } from './config';
 
 const userService = s2sClient(config.userServiceUrl, config.internalToken);
 
-const createSchema = z.object({
-  recipientId: z.string().uuid(),
-  type: z.enum(['new_follower', 'new_comment', 'new_reply']),
-  actorId: z.string().uuid(),
-  postId: z.string().uuid().optional(),
-  commentId: z.string().uuid().optional(),
-});
+// Note: notification events arrive via the Kafka consumer (see deliver.ts) —
+// there is no HTTP write endpoint anymore.
 
 const listQuery = z.object({
   cursor: z.string().optional(),
@@ -38,16 +31,6 @@ interface ActorSummary {
 }
 
 export const router: Router = Router();
-
-router.post('/internal/notifications', requireInternal(config.internalToken), validateBody(createSchema), async (req, res) => {
-  // Users never get notified about their own actions.
-  if (req.body.recipientId === req.body.actorId) {
-    res.status(204).end();
-    return;
-  }
-  const notification = await prisma.notification.create({ data: req.body });
-  res.status(201).json(notification);
-});
 
 router.get('/api/notifications', requireAuth(config.jwtPublicKey), async (req, res) => {
   const user = authedUser(req);

@@ -38,14 +38,16 @@ done
 # preload infra images so the cluster never pulls them from the network
 docker pull postgres:17-alpine >/dev/null 2>&1 || true
 docker pull minio/minio:latest >/dev/null 2>&1 || true
+docker pull apache/kafka:3.8.0 >/dev/null 2>&1 || true
 kind load docker-image postgres:17-alpine --name "$CLUSTER"
 kind load docker-image minio/minio:latest --name "$CLUSTER"
+kind load docker-image apache/kafka:3.8.0 --name "$CLUSTER"
 
 echo "--- applying manifests"
 kubectl apply -f infra/k8s/00-namespace.yaml
 bash infra/k8s/create-secrets.sh
 kubectl apply -f infra/k8s/01-config.yaml
-kubectl apply -f infra/k8s/10-postgres.yaml -f infra/k8s/11-minio.yaml
+kubectl apply -f infra/k8s/10-postgres.yaml -f infra/k8s/11-minio.yaml -f infra/k8s/12-kafka.yaml
 kubectl apply \
   -f infra/k8s/20-auth-service.yaml \
   -f infra/k8s/21-user-service.yaml \

@@ -10,6 +10,7 @@ async function main() {
   const { config } = await import('./config');
   const { prisma } = await import('./db');
   const { logger } = await import('./logger');
+  const { notifications } = await import('./events');
 
   const server = buildApp().listen(config.port, () => {
     logger.info({ port: config.port }, 'comment-service listening');
@@ -18,6 +19,7 @@ async function main() {
     server,
     logger,
     cleanup: async () => {
+      await notifications.disconnect();
       await prisma.$disconnect();
       await tracing.shutdown();
     },
