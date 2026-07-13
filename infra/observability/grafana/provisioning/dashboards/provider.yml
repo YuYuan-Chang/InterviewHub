@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: interviewhub
+    folder: InterviewHub
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

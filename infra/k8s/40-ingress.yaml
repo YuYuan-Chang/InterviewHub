@@ -1,0 +1,42 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: interviewhub
+  namespace: interviewhub
+  annotations:
+    # uploads are 10MB; give nginx headroom so the file-service returns the 413
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /api/auth
+            pathType: Prefix
+            backend:
+              service: { name: auth-service, port: { number: 4001 } }
+          - path: /api/users
+            pathType: Prefix
+            backend:
+              service: { name: user-service, port: { number: 4002 } }
+          - path: /api/posts
+            pathType: Prefix
+            backend:
+              service: { name: post-service, port: { number: 4003 } }
+          - path: /api/files
+            pathType: Prefix
+            backend:
+              service: { name: file-service, port: { number: 4004 } }
+          - path: /api/comments
+            pathType: Prefix
+            backend:
+              service: { name: comment-service, port: { number: 4005 } }
+          - path: /api/notifications
+            pathType: Prefix
+            backend:
+              service: { name: notification-service, port: { number: 4006 } }
+          # note: /internal/* is deliberately NOT routed — S2S endpoints stay cluster-internal
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { number: 80 } }

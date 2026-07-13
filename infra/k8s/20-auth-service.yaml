@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: interviewhub
+  labels: { app: auth-service }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: auth-service }
+  template:
+    metadata:
+      labels: { app: auth-service }
+      annotations:
+        # hook for a cluster Prometheus (kube-prometheus-stack et al.)
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '4001'
+        prometheus.io/path: /metrics
+    spec:
+      # migrations run once per pod before the app starts; migrate deploy holds
+      # an advisory lock so concurrent replicas cannot race
+      initContainers:
+        - name: migrate
+          image: interviewhub/auth-service:dev
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "until npx prisma migrate deploy --schema services/auth/prisma/schema.prisma; do echo 'db not ready, retrying'; sleep 3; done"]
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: interviewhub-secrets, key: AUTH_DATABASE_URL }
+      containers:
+        - name: auth-service
+          image: interviewhub/auth-service:dev
+          imagePullPolicy: IfNotPresent
+          command: ["node", "services/auth/dist/index.js"]
+          # let endpoint removal propagate before SIGTERM (zero-downtime rollouts)
+          lifecycle:
+            preStop:
+              exec: { command: ["sh", "-c", "sleep 5"] }
+          ports:
+            - containerPort: 4001
+          envFrom:
+            - configMapRef: { name: interviewhub-config }
+          env:
+            - name: PORT
+              value: "4001"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: interviewhub-secrets, key: AUTH_DATABASE_URL }
+            - name: JWT_PUBLIC_KEY_B64
+              valueFrom:
+                secretKeyRef: { name: interviewhub-secrets, key: JWT_PUBLIC_KEY_B64 }
+            - name: INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef: { name: interviewhub-secrets, key: INTERNAL_TOKEN }
+            - name: JWT_PRIVATE_KEY_B64
+              valueFrom:
+                secretKeyRef: { name: interviewhub-secrets, key: JWT_PRIVATE_KEY_B64 }
+          # readiness gates traffic on DB reachability; liveness only restarts a dead process
+          readinessProbe:
+            httpGet: { path: /healthz, port: 4001 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /livez, port: 4001 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          # requests are required for the HPA's CPU utilization math
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { cpu: 500m, memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: interviewhub
+spec:
+  selector: { app: auth-service }
+  ports:
+    - port: 4001
+      targetPort: 4001
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: auth-service
+  namespace: interviewhub
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: auth-service
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

@@ -1,0 +1,10 @@
+node_modules/
+dist/
+generated/
+*.tsbuildinfo
+.env
+infra/.env
+infra/keys/
+.DS_Store
+coverage/
+frontend/dist/

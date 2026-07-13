@@ -1,0 +1,85 @@
+# Dev-cluster Postgres. In production use a managed database (RDS/Cloud SQL)
+# and delete this file — the services only care about their DATABASE_URL.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: interviewhub
+data:
+  01-create-databases.sql: |
+    CREATE USER auth_svc WITH PASSWORD 'auth_pw';
+    CREATE DATABASE auth_db OWNER auth_svc;
+    CREATE USER user_svc WITH PASSWORD 'user_pw';
+    CREATE DATABASE user_db OWNER user_svc;
+    CREATE USER post_svc WITH PASSWORD 'post_pw';
+    CREATE DATABASE post_db OWNER post_svc;
+    CREATE USER file_svc WITH PASSWORD 'file_pw';
+    CREATE DATABASE file_db OWNER file_svc;
+    CREATE USER comment_svc WITH PASSWORD 'comment_pw';
+    CREATE DATABASE comment_db OWNER comment_svc;
+    CREATE USER notification_svc WITH PASSWORD 'notification_pw';
+    CREATE DATABASE notification_db OWNER notification_svc;
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: interviewhub
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              value: postgres
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: init
+          configMap: { name: postgres-init }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests: { storage: 1Gi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: interviewhub
+spec:
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+      targetPort: 5432

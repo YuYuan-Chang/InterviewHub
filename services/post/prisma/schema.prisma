@@ -1,0 +1,46 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Post {
+  id           String         @id @default(uuid())
+  authorId     String         @map("author_id")
+  title        String
+  description  String
+  tags         String[]
+  // legacy single-file columns (kept so `db push` stays additive; new posts use `attachments`)
+  fileId       String?        @map("file_id")
+  fileName     String?        @map("file_name")
+  fileMime     String?        @map("file_mime")
+  fileSize     Int?           @map("file_size")
+  // [{ fileId, name, mime, sizeBytes }, ...] — up to 8 per post
+  attachments  Json           @default("[]")
+  upvoteCount  Int            @default(0) @map("upvote_count")
+  commentCount Int            @default(0) @map("comment_count")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  reactions    PostReaction[]
+
+  @@index([authorId])
+  @@index([createdAt(sort: Desc)])
+  @@index([upvoteCount(sort: Desc), createdAt(sort: Desc)])
+  @@index([tags], type: Gin)
+  @@map("posts")
+}
+
+model PostReaction {
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId])
+  @@map("post_reactions")
+}

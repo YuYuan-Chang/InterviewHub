@@ -1,0 +1,36 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Comment {
+  id          String            @id @default(uuid())
+  postId      String            @map("post_id")
+  authorId    String            @map("author_id")
+  parentId    String?           @map("parent_id")
+  body        String
+  upvoteCount Int               @default(0) @map("upvote_count")
+  createdAt   DateTime          @default(now()) @map("created_at")
+  parent      Comment?          @relation("Thread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies     Comment[]         @relation("Thread")
+  reactions   CommentReaction[]
+
+  @@index([postId])
+  @@map("comments")
+}
+
+model CommentReaction {
+  commentId String   @map("comment_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  comment   Comment  @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@map("comment_reactions")
+}

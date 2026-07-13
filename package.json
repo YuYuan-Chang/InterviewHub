@@ -1,0 +1,22 @@
+{
+  "name": "interviewhub",
+  "private": true,
+  "version": "0.1.0",
+  "description": "InterviewHub — a social platform for sharing interview prep materials (microservices demo)",
+  "workspaces": [
+    "packages/*",
+    "services/*",
+    "frontend"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @interviewhub/shared",
+    "build": "npm run build:shared && npm run build --workspaces --if-present",
+    "generate": "npm run prisma:generate --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "smoke": "node scripts/smoke-test.mjs",
+    "seed": "node scripts/seed.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

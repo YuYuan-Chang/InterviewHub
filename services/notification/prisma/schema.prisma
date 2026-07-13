@@ -1,0 +1,25 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Notification {
+  id          String   @id @default(uuid())
+  recipientId String   @map("recipient_id")
+  type        String // new_follower | new_comment | new_reply
+  actorId     String   @map("actor_id")
+  postId      String?  @map("post_id")
+  commentId   String?  @map("comment_id")
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@index([recipientId, read])
+  @@map("notifications")
+}

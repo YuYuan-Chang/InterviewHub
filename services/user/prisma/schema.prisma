@@ -1,0 +1,35 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  userId      String   @id @map("user_id")
+  username    String   @unique
+  displayName String   @map("display_name")
+  school      String   @default("")
+  targetRoles String[] @map("target_roles")
+  bio         String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("profiles")
+}
+
+// The follow graph. Kept in user-service (same aggregate as profiles) but in
+// its own module (src/follows/) so it could be extracted into a dedicated
+// social-graph service without touching profile code.
+model Follow {
+  followerId String   @map("follower_id")
+  followeeId String   @map("followee_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([followerId, followeeId])
+  @@index([followeeId])
+  @@map("follows")
+}

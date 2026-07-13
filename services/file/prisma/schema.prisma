@@ -1,0 +1,23 @@
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model File {
+  id           String   @id @default(uuid())
+  ownerId      String   @map("owner_id")
+  s3Key        String   @unique @map("s3_key")
+  originalName String   @map("original_name")
+  mime         String
+  sizeBytes    Int      @map("size_bytes")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([ownerId])
+  @@map("files")
+}

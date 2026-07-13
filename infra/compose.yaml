@@ -1,0 +1,165 @@
+name: interviewhub
+
+# Shared env for every Node service
+x-service-env: &service-env
+  JWT_PUBLIC_KEY_B64: ${JWT_PUBLIC_KEY_B64}
+  INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+  USER_SERVICE_URL: http://user-service:4002
+  POST_SERVICE_URL: http://post-service:4003
+  FILE_SERVICE_URL: http://file-service:4004
+  NOTIFICATION_SERVICE_URL: http://notification-service:4006
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # 5433 on the host: avoids colliding with a native/Homebrew Postgres on 5432.
+      # Containers still reach this via the "postgres" hostname on 5432 internally.
+      - "5433:5432"
+    volumes:
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  auth-service:
+    build: { context: .., dockerfile: services/auth/Dockerfile }
+    image: interviewhub/auth-service:dev
+    environment:
+      <<: *service-env
+      PORT: "4001"
+      DATABASE_URL: postgresql://auth_svc:auth_pw@postgres:5432/auth_db
+      JWT_PRIVATE_KEY_B64: ${JWT_PRIVATE_KEY_B64}
+    ports: ["4001:4001"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  user-service:
+    build: { context: .., dockerfile: services/user/Dockerfile }
+    image: interviewhub/user-service:dev
+    environment:
+      <<: *service-env
+      PORT: "4002"
+      DATABASE_URL: postgresql://user_svc:user_pw@postgres:5432/user_db
+    ports: ["4002:4002"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  post-service:
+    build: { context: .., dockerfile: services/post/Dockerfile }
+    image: interviewhub/post-service:dev
+    environment:
+      <<: *service-env
+      PORT: "4003"
+      DATABASE_URL: postgresql://post_svc:post_pw@postgres:5432/post_db
+    ports: ["4003:4003"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  file-service:
+    build: { context: .., dockerfile: services/file/Dockerfile }
+    image: interviewhub/file-service:dev
+    environment:
+      <<: *service-env
+      PORT: "4004"
+      DATABASE_URL: postgresql://file_svc:file_pw@postgres:5432/file_db
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: interviewhub-files
+    ports: ["4004:4004"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  comment-service:
+    build: { context: .., dockerfile: services/comment/Dockerfile }
+    image: interviewhub/comment-service:dev
+    environment:
+      <<: *service-env
+      PORT: "4005"
+      DATABASE_URL: postgresql://comment_svc:comment_pw@postgres:5432/comment_db
+    ports: ["4005:4005"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  notification-service:
+    build: { context: .., dockerfile: services/notification/Dockerfile }
+    image: interviewhub/notification-service:dev
+    environment:
+      <<: *service-env
+      PORT: "4006"
+      DATABASE_URL: postgresql://notification_svc:notification_pw@postgres:5432/notification_db
+    ports: ["4006:4006"]
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  frontend:
+    build: { context: ../frontend, dockerfile: Dockerfile }
+    image: interviewhub/frontend:dev
+    ports:
+      - "8080:80"
+    depends_on:
+      - auth-service
+      - user-service
+      - post-service
+      - file-service
+      - comment-service
+      - notification-service
+
+  # ---- observability ----
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686" # UI
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  miniodata:

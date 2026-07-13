@@ -1,0 +1,32 @@
+# Serves the SPA and proxies /api/* to the backend services.
+#
+# proxy_pass targets are variables so nginx re-resolves DNS at runtime instead
+# of caching container IPs from boot (compose recreations change IPs; a static
+# proxy_pass would 502 until nginx restarts). DNS_RESOLVER is substituted by
+# the nginx image's envsubst entrypoint:
+#   - docker compose: 127.0.0.11 (Docker's embedded DNS) — the default
+#   - kubernetes:     kube-dns ClusterIP (set in 30-frontend.yaml)
+server {
+    listen 80;
+    server_name _;
+
+    resolver ${DNS_RESOLVER} valid=10s ipv6=off;
+
+    client_max_body_size 12m; # let the file-service return a clean 413 at >10MB
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # no trailing slashes: must match both /api/files and /api/files/<id>/download
+    location /api/auth          { set $auth_upstream http://auth-service:4001; proxy_pass $auth_upstream; }
+    location /api/users         { set $user_upstream http://user-service:4002; proxy_pass $user_upstream; }
+    location /api/posts         { set $post_upstream http://post-service:4003; proxy_pass $post_upstream; }
+    location /api/files         { set $file_upstream http://file-service:4004; proxy_pass $file_upstream; }
+    location /api/comments      { set $comment_upstream http://comment-service:4005; proxy_pass $comment_upstream; }
+    location /api/notifications { set $notification_upstream http://notification-service:4006; proxy_pass $notification_upstream; }
+
+    # SPA fallback
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

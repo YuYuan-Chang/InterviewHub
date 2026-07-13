@@ -1,0 +1,48 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "auth-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/auth-service"],
+      "port": 4001,
+      "autoPort": false
+    },
+    {
+      "name": "user-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/user-service"],
+      "port": 4002
+    },
+    {
+      "name": "post-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/post-service"],
+      "port": 4003
+    },
+    {
+      "name": "file-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/file-service"],
+      "port": 4004
+    },
+    {
+      "name": "comment-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/comment-service"],
+      "port": 4005
+    },
+    {
+      "name": "notification-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/notification-service"],
+      "port": 4006
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "-w", "@interviewhub/frontend"],
+      "port": 5173
+    }
+  ]
+}
