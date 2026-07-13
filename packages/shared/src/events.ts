@@ -1,4 +1,4 @@
-import { Kafka, logLevel } from 'kafkajs';
+import type { Kafka } from 'kafkajs';
 import { z } from 'zod';
 import { getRequestId } from './context';
 import type { Logger } from './logging';
@@ -17,7 +17,11 @@ export const notificationEventSchema = z.object({
 export type NotificationEvent = z.infer<typeof notificationEventSchema>;
 
 function kafkaClient(brokers: string, clientId: string): Kafka {
-  return new Kafka({
+  // Lazy require: kafkajs must not load when this module is imported, or it
+  // slips in before initTracing() and OTel's kafkajs instrumentation can't
+  // patch it (same reason services dynamic-import their app after tracing).
+  const { Kafka: KafkaCtor, logLevel } = require('kafkajs') as typeof import('kafkajs');
+  return new KafkaCtor({
     clientId,
     brokers: brokers.split(',').map((b) => b.trim()).filter(Boolean),
     logLevel: logLevel.NOTHING, // kafkajs is chatty; our pino logs cover the interesting events
