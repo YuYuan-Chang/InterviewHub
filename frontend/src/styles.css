@@ -763,3 +763,29 @@ select {
 .lightbox-nav:hover {
   background: rgba(255, 255, 255, 0.28);
 }
+
+/* ---- avatar photos & edit profile ---- */
+.avatar-img {
+  object-fit: cover;
+  border-radius: 50%;
+  display: inline-block;
+}
+.avatar-editor {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.avatar-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.profile-info {
+  flex: 1;
+  min-width: 0;
+}
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}

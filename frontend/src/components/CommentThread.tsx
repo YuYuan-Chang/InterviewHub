@@ -41,7 +41,7 @@ function CommentItem({
       <div className="comment-rail">
         {username ? (
           <Link to={`/u/${username}`}>
-            <Avatar username={username} displayName={comment.author?.displayName} size="sm" />
+            <Avatar username={username} displayName={comment.author?.displayName} fileId={comment.author?.avatarFileId} size="sm" />
           </Link>
         ) : (
           <Avatar username="?" size="sm" />
@@ -127,7 +127,7 @@ export function CommentForm({
 
   return (
     <form onSubmit={submit} className="comment-form">
-      {me && !parentId && <Avatar username={me.username} displayName={me.displayName} size="sm" />}
+      {me && !parentId && <Avatar username={me.username} displayName={me.displayName} fileId={me.avatarFileId} size="sm" />}
       <div className="comment-form-main">
         <textarea
           rows={parentId ? 2 : 3}

@@ -3,6 +3,7 @@ export interface AuthorSummary {
   username: string;
   displayName: string;
   school?: string;
+  avatarFileId?: string | null;
 }
 
 export interface Profile {
@@ -12,6 +13,7 @@ export interface Profile {
   school: string;
   targetRoles: string[];
   bio: string;
+  avatarFileId: string | null;
   followerCount: number;
   followingCount: number;
   isFollowing: boolean;

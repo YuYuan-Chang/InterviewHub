@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { PostCard } from '../components/PostCard';
+import { Avatar } from '../components/Avatar';
 import type { AuthorSummary, Page, Post, Profile } from '../types';
 
 type ListKind = 'followers' | 'following' | null;
@@ -53,7 +54,8 @@ export function ProfilePage() {
   return (
     <div>
       <section className="card profile-header">
-        <div>
+        <Avatar username={profile.username} displayName={profile.displayName} fileId={profile.avatarFileId} size="xl" />
+        <div className="profile-info">
           <h2>{profile.displayName}</h2>
           <p className="post-meta">@{profile.username}{profile.school ? ` · ${profile.school}` : ''}</p>
           {profile.targetRoles.length > 0 && (
@@ -75,7 +77,11 @@ export function ProfilePage() {
             </button>
           </p>
         </div>
-        {!isSelf && (
+        {isSelf ? (
+          <button className="btn btn-ghost" onClick={() => navigate('/settings/profile')}>
+            Edit profile
+          </button>
+        ) : (
           <button className={`btn ${profile.isFollowing ? 'btn-ghost' : 'btn-primary'}`} onClick={toggleFollow}>
             {profile.isFollowing ? 'Unfollow' : 'Follow'}
           </button>

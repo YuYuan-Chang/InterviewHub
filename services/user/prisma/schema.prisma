@@ -10,13 +10,14 @@ datasource db {
 }
 
 model Profile {
-  userId      String   @id @map("user_id")
-  username    String   @unique
-  displayName String   @map("display_name")
-  school      String   @default("")
-  targetRoles String[] @map("target_roles")
-  bio         String   @default("")
-  createdAt   DateTime @default(now()) @map("created_at")
+  userId       String   @id @map("user_id")
+  username     String   @unique
+  displayName  String   @map("display_name")
+  school       String   @default("")
+  targetRoles  String[] @map("target_roles")
+  bio          String   @default("")
+  avatarFileId String?  @map("avatar_file_id") // file-service asset, served via /api/files/:id/content
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("profiles")
 }

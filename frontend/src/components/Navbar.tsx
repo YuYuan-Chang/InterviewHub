@@ -48,7 +48,7 @@ export function Navbar() {
               🔔{unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
             </Link>
             <Link to={`/u/${me.username}`} className="nav-user" title={`@${me.username}`}>
-              <Avatar username={me.username} displayName={me.displayName} size="sm" />
+              <Avatar username={me.username} displayName={me.displayName} fileId={me.avatarFileId} size="sm" />
             </Link>
             <button
               className="btn btn-ghost"

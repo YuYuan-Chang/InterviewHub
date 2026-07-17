@@ -239,6 +239,56 @@ async function main() {
   });
   check('9 attachments rejected with 400', tooMany.status === 400, `got ${tooMany.status}`);
 
+  console.log('— profile editing');
+  const profilePatch = await api('/api/users/me', {
+    method: 'PATCH',
+    token: alice.accessToken,
+    body: { displayName: 'Alice C.', bio: 'Prepping for SWE internships.', targetRoles: ['SWE intern', 'quant'] },
+  });
+  check(
+    'PATCH profile updates fields',
+    profilePatch.status === 200 && profilePatch.data.bio === 'Prepping for SWE internships.',
+    JSON.stringify(profilePatch.data),
+  );
+  const alicePublic = await api(`/api/users/by-username/alice_${run}`);
+  check(
+    'public profile reflects edits',
+    alicePublic.data.displayName === 'Alice C.' && alicePublic.data.targetRoles.includes('quant'),
+    JSON.stringify([alicePublic.data.displayName, alicePublic.data.targetRoles]),
+  );
+
+  const avatarFd = new FormData();
+  avatarFd.append('file', new Blob([png], { type: 'image/png' }), 'me.png');
+  const avatarUpload = await api('/api/files', { method: 'POST', token: alice.accessToken, formData: avatarFd });
+  const avatarPatch = await api('/api/users/me', {
+    method: 'PATCH',
+    token: alice.accessToken,
+    body: { avatarFileId: avatarUpload.data.id },
+  });
+  check(
+    'avatar set from own image upload',
+    avatarPatch.status === 200 && avatarPatch.data.avatarFileId === avatarUpload.data.id,
+    `got ${avatarPatch.status}`,
+  );
+  const feedWithAvatar = await api(`/api/posts/feed/explore?authorId=${alice.user.id}&limit=1`);
+  check(
+    'feed authors carry avatarFileId',
+    feedWithAvatar.data.items[0]?.author?.avatarFileId === avatarUpload.data.id,
+    JSON.stringify(feedWithAvatar.data.items[0]?.author),
+  );
+  const foreignAvatar = await api('/api/users/me', {
+    method: 'PATCH',
+    token: bob.accessToken,
+    body: { avatarFileId: avatarUpload.data.id },
+  });
+  check("using someone else's file as avatar rejected 403", foreignAvatar.status === 403, `got ${foreignAvatar.status}`);
+  const pdfAvatar = await api('/api/users/me', {
+    method: 'PATCH',
+    token: bob.accessToken,
+    body: { avatarFileId: upload.data.id },
+  });
+  check('non-image avatar rejected 400', pdfAvatar.status === 400, `got ${pdfAvatar.status}`);
+
   console.log('— search & filters');
   const titleSearch = await api('/api/posts/feed/explore?q=prep%20notes');
   check(
