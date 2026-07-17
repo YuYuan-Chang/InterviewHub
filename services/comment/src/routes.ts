@@ -28,6 +28,7 @@ interface AuthorSummary {
   userId: string;
   username: string;
   displayName: string;
+  avatarFileId: string | null;
 }
 
 export const router: Router = Router();

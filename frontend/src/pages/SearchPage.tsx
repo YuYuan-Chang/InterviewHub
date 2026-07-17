@@ -29,7 +29,7 @@ function PersonRow({ person }: { person: Profile }) {
   return (
     <div className="person-row">
       <Link to={`/u/${person.username}`} className="post-avatar">
-        <Avatar username={person.username} displayName={person.displayName} />
+        <Avatar username={person.username} displayName={person.displayName} fileId={person.avatarFileId} />
       </Link>
       <div className="person-info">
         <Link to={`/u/${person.username}`} className="post-author">

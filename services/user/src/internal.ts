@@ -38,7 +38,7 @@ internalRouter.get('/internal/users/:userId/following', async (req, res) => {
 internalRouter.post('/internal/profiles/batch', validateBody(batchSchema), async (req, res) => {
   const profiles = await prisma.profile.findMany({
     where: { userId: { in: req.body.ids } },
-    select: { userId: true, username: true, displayName: true, school: true },
+    select: { userId: true, username: true, displayName: true, school: true, avatarFileId: true },
   });
   res.json({ profiles });
 });

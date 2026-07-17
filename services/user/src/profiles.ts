@@ -1,15 +1,27 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { HttpError, authedUser, optionalAuth, parseQuery, requireAuth, validateBody, param } from '@interviewhub/shared';
+import {
+  HttpError,
+  authedUser,
+  optionalAuth,
+  parseQuery,
+  requireAuth,
+  s2sClient,
+  validateBody,
+  param,
+} from '@interviewhub/shared';
 import { prisma } from './db';
 import { config } from './config';
 import { followCounts, isFollowing } from './follows/service';
+
+const fileService = s2sClient(config.fileServiceUrl, config.internalToken);
 
 const updateSchema = z.object({
   displayName: z.string().min(1).max(80).optional(),
   school: z.string().max(120).optional(),
   targetRoles: z.array(z.string().min(1).max(60)).max(10).optional(),
   bio: z.string().max(2000).optional(),
+  avatarFileId: z.string().uuid().nullable().optional(), // null clears the avatar
 });
 
 async function withCounts(profile: NonNullable<Awaited<ReturnType<typeof prisma.profile.findUnique>>>, viewerId?: string) {
@@ -36,6 +48,13 @@ profilesRouter.patch(
   validateBody(updateSchema),
   async (req, res) => {
     const { id } = authedUser(req);
+    const { avatarFileId } = req.body as { avatarFileId?: string | null };
+    if (avatarFileId) {
+      // must be the caller's own uploaded image
+      const file = await fileService.get<{ ownerId: string; mime: string }>(`/internal/files/${avatarFileId}`);
+      if (file.ownerId !== id) throw new HttpError(403, 'You can only use a file you uploaded');
+      if (!file.mime.startsWith('image/')) throw new HttpError(400, 'Avatar must be an image');
+    }
     const profile = await prisma.profile.update({ where: { userId: id }, data: req.body });
     res.json(await withCounts(profile));
   },

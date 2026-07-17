@@ -41,7 +41,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post
     <article className="post">
       {username ? (
         <Link to={`/u/${username}`} className="post-avatar">
-          <Avatar username={username} displayName={post.author?.displayName} />
+          <Avatar username={username} displayName={post.author?.displayName} fileId={post.author?.avatarFileId} />
         </Link>
       ) : (
         <span className="post-avatar">

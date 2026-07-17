@@ -11,6 +11,7 @@ export interface AuthorSummary {
   username: string;
   displayName: string;
   school: string;
+  avatarFileId: string | null;
 }
 
 export interface AttachmentMeta {

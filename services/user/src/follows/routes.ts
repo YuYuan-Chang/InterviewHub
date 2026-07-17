@@ -53,7 +53,7 @@ async function listHandler(direction: 'followers' | 'following', userId: string,
   const ids = page.map((e) => (direction === 'followers' ? e.followerId : e.followeeId));
   const profiles = await prisma.profile.findMany({
     where: { userId: { in: ids } },
-    select: { userId: true, username: true, displayName: true, school: true },
+    select: { userId: true, username: true, displayName: true, school: true, avatarFileId: true },
   });
   const byId = new Map(profiles.map((p) => [p.userId, p]));
   return {
