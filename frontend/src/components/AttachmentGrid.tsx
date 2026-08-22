@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { downloadFile, fileContentUrl } from '../api';
 import { docIcon, formatBytes, isImage, isPdf, isVideo } from '../format';
 import { Lightbox } from './Lightbox';
+import { PdfPreview } from './PdfPreview';
 import { PdfThumb } from './PdfThumb';
 import type { Attachment } from '../types';
 
@@ -18,14 +19,17 @@ function VideoTile({ attachment }: { attachment: Attachment }) {
   );
 }
 
-function DocTile({ attachment }: { attachment: Attachment }) {
+function DocTile({ attachment, onPreview }: { attachment: Attachment; onPreview: () => void }) {
+  const pdf = isPdf(attachment.mime);
   return (
     <button
+      type="button"
       className="tile-btn doc-tile"
-      onClick={() => downloadFile(attachment.fileId, attachment.name)}
-      title={`Download ${attachment.name}`}
+      onClick={pdf ? onPreview : () => void downloadFile(attachment.fileId, attachment.name)}
+      title={`${pdf ? 'Preview' : 'Download'} ${attachment.name}`}
+      aria-label={`${pdf ? 'Preview' : 'Download'} ${attachment.name}`}
     >
-      {isPdf(attachment.mime) ? (
+      {pdf ? (
         <PdfThumb fileId={attachment.fileId} />
       ) : (
         <span className="doc-icon">{docIcon(attachment.mime)}</span>
@@ -44,6 +48,7 @@ function DocTile({ attachment }: { attachment: Attachment }) {
  */
 export function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<Attachment | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   if (!attachments || attachments.length === 0) return null;
@@ -62,7 +67,7 @@ export function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
       );
     }
     if (isVideo(a.mime)) return <VideoTile attachment={a} />;
-    return <DocTile attachment={a} />;
+    return <DocTile attachment={a} onPreview={() => setPdfPreview(a)} />;
   }
 
   return (
@@ -87,6 +92,7 @@ export function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
           onNav={setLightboxIndex}
         />
       )}
+      {pdfPreview && <PdfPreview attachment={pdfPreview} onClose={() => setPdfPreview(null)} />}
     </>
   );
 }
