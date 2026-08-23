@@ -76,7 +76,7 @@ cd infra && docker compose up -d --build
 open http://localhost:8080          # the app
 
 node scripts/smoke-test.mjs         # end-to-end test through the gateway
-node scripts/seed.mjs               # demo users/posts (mchen@example.com / password123)
+node scripts/seed.mjs               # 10 demo users, 28 posts, threaded comments (mchen@example.com / password123)
 ```
 
 MinIO console: http://localhost:9001 (minioadmin/minioadmin). Service ports 4001-4006 are also mapped for direct curl.
