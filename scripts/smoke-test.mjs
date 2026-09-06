@@ -368,6 +368,66 @@ async function main() {
     JSON.stringify(schoolSearch.data.items?.map((u) => [u.username, u.isFollowing])),
   );
 
+  console.log('— structured interview experiences');
+  const interviewDetails = {
+    company: ` ExperienceCorp_${run} `,
+    role: ` Platform engineer_${run} `,
+    stage: 'technical',
+    questions: `Explain cacheinvalidation_${run}.\nHow would you test concurrent updates?`,
+    difficulty: 'hard',
+    outcome: 'pending',
+  };
+  const experience = await api('/api/posts', {
+    method: 'POST', token: bob.accessToken,
+    body: { title: 'My technical interview', type: 'experience', interviewExperience: interviewDetails, tags: ['interview-experience'], fileIds: [upload.data.id] },
+  });
+  check('experience created with structured details and attachment',
+    experience.status === 201 && experience.data.type === 'experience' &&
+    experience.data.interviewExperience?.company === interviewDetails.company.trim() && experience.data.attachments?.length === 1);
+  const experienceId = experience.data?.id;
+  const detail = await api(`/api/posts/${experienceId}`);
+  check('experience details round-trip on post detail', detail.status === 200 &&
+    detail.data.interviewExperience?.questions === interviewDetails.questions &&
+    detail.data.interviewExperience?.stage === 'technical' && detail.data.interviewExperience?.outcome === 'pending');
+  check('legacy posts remain materials', legacyView.data.type === 'material' && legacyView.data.interviewExperience === null);
+  for (const field of ['company', 'role', 'questions']) {
+    const searchTerm = field === 'questions' ? `cacheinvalidation_${run}` : interviewDetails[field].trim().toUpperCase();
+    const found = await api(`/api/posts/feed/explore?q=${encodeURIComponent(searchTerm)}`);
+    check(`search matches interview ${field}`, found.status === 200 && found.data.items.some((p) => p.id === experienceId));
+  }
+  const experienceFilters = new URLSearchParams({ type: 'experience', company: interviewDetails.company.trim().toLowerCase(), role: 'platform', stage: 'technical', difficulty: 'hard', outcome: 'pending', tags: 'interview-experience' });
+  for (const feed of ['explore', 'following']) {
+    const filtered = await api(`/api/posts/feed/${feed}?${experienceFilters}`, { token: alice.accessToken });
+    check(`${feed} combines interview filters with tags`, filtered.status === 200 && filtered.data.items.length === 1 && filtered.data.items[0].id === experienceId);
+  }
+  const materialOnly = await api(`/api/posts/feed/explore?type=material&authorId=${bob.user.id}`);
+  check('material filter excludes experiences', materialOnly.status === 200 && materialOnly.data.items.length > 0 && materialOnly.data.items.every((p) => p.type === 'material'));
+  for (const [field, value] of [['company', 'nonexistent'], ['role', 'nonexistent'], ['stage', 'behavioral'], ['difficulty', 'easy'], ['outcome', 'offer']]) {
+    const filters = new URLSearchParams(experienceFilters);
+    filters.set(field, value);
+    const result = await api(`/api/posts/feed/explore?${filters}`);
+    check(`${field} filter excludes nonmatching experiences`, result.status === 200 && result.data.items.length === 0);
+  }
+  for (const body of [
+    { title: 'Missing details', type: 'experience' },
+    { title: 'Invalid company', type: 'experience', interviewExperience: { ...interviewDetails, company: '   ' } },
+    { title: 'Invalid stage', type: 'experience', interviewExperience: { ...interviewDetails, stage: 'invalid' } },
+    { title: 'Mismatched type', type: 'material', interviewExperience: interviewDetails },
+  ]) {
+    const invalid = await api('/api/posts', { method: 'POST', token: bob.accessToken, body });
+    check(`${body.title} rejected with 400`, invalid.status === 400);
+  }
+  const invalidFilter = await api('/api/posts/feed/explore?difficulty=impossible');
+  check('invalid interview filter rejected with 400', invalidFilter.status === 400);
+  const anonExperience = await api('/api/posts', { method: 'POST', body: { title: 'Anonymous experience', type: 'experience', interviewExperience: interviewDetails } });
+  check('experience creation requires authentication', anonExperience.status === 401);
+  const foreignDelete = await api(`/api/posts/${experienceId}`, { method: 'DELETE', token: alice.accessToken });
+  check('only author can delete experience', foreignDelete.status === 403);
+  const deletedExperience = await api(`/api/posts/${experienceId}`, { method: 'DELETE', token: bob.accessToken });
+  check('author can delete experience', deletedExperience.status === 204);
+  const deletedDetail = await api(`/api/posts/${experienceId}`);
+  check('deleted experience no longer accessible', deletedDetail.status === 404);
+
   console.log('— reactions & comments');
   const upvote = await api(`/api/posts/${post.data.id}/upvote`, { method: 'PUT', token: alice.accessToken });
   const upvoteAgain = await api(`/api/posts/${post.data.id}/upvote`, { method: 'PUT', token: alice.accessToken });

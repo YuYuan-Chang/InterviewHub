@@ -29,12 +29,27 @@ model Post {
   resumeText   String?        @map("resume_text")
   resumeVersion Int           @default(1) @map("resume_version")
   revisions    ResumeRevision[]
+  interviewExperience InterviewExperience?
 
   @@index([authorId])
   @@index([createdAt(sort: Desc)])
   @@index([upvoteCount(sort: Desc), createdAt(sort: Desc)])
   @@index([tags], type: Gin)
   @@map("posts")
+}
+
+model InterviewExperience {
+  postId     String @id @map("post_id")
+  company    String @db.VarChar(120)
+  role       String @db.VarChar(120)
+  stage      String
+  questions  String
+  difficulty String
+  outcome    String
+  post       Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([company, role])
+  @@map("interview_experiences")
 }
 
 model PostReaction {

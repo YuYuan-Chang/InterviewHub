@@ -1598,3 +1598,73 @@ h1 {
 .resume-review button:disabled { opacity: 0.5; cursor: default; }
 .revision-fields { grid-template-columns: minmax(0, 1fr); }
 .revision-fields label, .revision-fields input, .revision-fields textarea { min-width: 0; max-width: 100%; }
+/* ---- structured interview experiences ---- */
+.experience-fields {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+.experience-fields legend { font-weight: 700; padding: 0 0.3rem; }
+.experience-form-grid, .interview-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.experience-form-grid input, .experience-form-grid select { width: 100%; min-width: 0; }
+.experience-filters {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.8rem 0.9rem;
+  margin-bottom: 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.experience-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.experience-filters input {
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface);
+}
+.experience-filters .btn-link { justify-self: start; }
+.interview-details {
+  margin: 0.65rem 0;
+  padding: 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow-wrap: anywhere;
+}
+.experience-badge {
+  color: var(--primary-dark);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.interview-facts { margin: 0.6rem 0; font-size: 0.85rem; }
+.interview-facts dt { color: var(--muted); font-size: 0.75rem; }
+.interview-facts dd { margin: 0; font-weight: 600; }
+.interview-questions { border-top: 1px solid var(--border); padding-top: 0.6rem; font-size: 0.85rem; }
+.interview-questions summary { cursor: pointer; font-weight: 600; }
+.interview-questions h4 { margin: 0; }
+.interview-questions p { white-space: pre-wrap; margin: 0.5rem 0 0; }
+select:focus-visible, .experience-filters input:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -1px;
+}
+@media (max-width: 420px) {
+  .experience-form-grid, .interview-facts { grid-template-columns: 1fr; }
+}

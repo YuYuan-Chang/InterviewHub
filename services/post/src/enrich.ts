@@ -1,5 +1,5 @@
 import { s2sClient, param } from '@interviewhub/shared';
-import type { Post } from '../generated/prisma';
+import type { Post, Prisma } from '../generated/prisma';
 import { prisma } from './db';
 import { config } from './config';
 import { logger } from './logger';
@@ -21,7 +21,10 @@ export interface AttachmentMeta {
   sizeBytes: number;
 }
 
-export interface EnrichedPost extends Omit<Post, 'createdAt' | 'attachments'> {
+type PostWithExperience = Prisma.PostGetPayload<{ include: { interviewExperience: true } }>;
+
+export interface EnrichedPost extends Omit<PostWithExperience, 'createdAt' | 'attachments'> {
+  type: 'material' | 'experience';
   createdAt: string;
   attachments: AttachmentMeta[];
   author: AuthorSummary | null;
@@ -46,7 +49,7 @@ function attachmentsOf(p: Post): AttachmentMeta[] {
 }
 
 /** Attach author profiles (batched S2S call) and the viewer's upvote state. */
-export async function enrichPosts(posts: Post[], viewerId?: string): Promise<EnrichedPost[]> {
+export async function enrichPosts(posts: PostWithExperience[], viewerId?: string): Promise<EnrichedPost[]> {
   if (posts.length === 0) return [];
   const authorIds = [...new Set(posts.map((p) => p.authorId))];
 
@@ -71,6 +74,7 @@ export async function enrichPosts(posts: Post[], viewerId?: string): Promise<Enr
 
   return posts.map((p) => ({
     ...p,
+    type: p.interviewExperience ? 'experience' : 'material',
     createdAt: p.createdAt.toISOString(),
     attachments: attachmentsOf(p),
     author: authorsById.get(p.authorId) ?? null,

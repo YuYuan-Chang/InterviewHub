@@ -77,6 +77,33 @@ Run that once after cloning, and re-run `npm run generate` after any `schema.pri
 - **Reactions** — upvotes on both posts and comments
 - **Search** — one search bar covering posts (title/description/tags, via `?q=` on the explore feed) and people (username/name/school, via `/api/users/search`)
 - **Filters** — multi-tag filtering (`?tags=a,b`, AND semantics) with a chip bar fed by `/api/posts/tags/popular`
+- **Structured interview experiences** — choose “Interview experience” when creating a post to share company, role, stage, questions asked, difficulty, and outcome. Browse experiences using company/role/stage/difficulty/outcome filters; search also matches company, role, and question text. Attachments, comments, and upvotes work as usual.
+
+### Interview experience API
+
+`POST /api/posts` accepts `type: "experience"` and a required `interviewExperience` object:
+
+```json
+{
+  "title": "My backend engineering interview",
+  "type": "experience",
+  "description": "Practicing aloud helped me explain my trade-offs.",
+  "interviewExperience": {
+    "company": "Example Corp",
+    "role": "Backend engineer",
+    "stage": "technical",
+    "questions": "Design an LRU cache.\nHow would you test concurrent access?",
+    "difficulty": "hard",
+    "outcome": "pending"
+  }
+}
+```
+
+Stages: `recruiter_screen`, `online_assessment`, `technical`, `system_design`, `behavioral`, `onsite`, `other`. Difficulty: `easy`, `medium`, `hard`. Outcomes: `offer`, `rejected`, `pending`, `withdrew`, `prefer_not_to_say`. Company and role are trimmed, required, and limited to 120 characters; questions are trimmed, required, and limited to 5,000 characters.
+
+Both feeds accept `type=experience|material`, `company`, `role`, `stage`, `difficulty`, and `outcome`, combined with existing tags, sort, and pagination. Company/role filters use case-insensitive substring matching. Post responses include `type` and `interviewExperience` (null for materials). Existing clients can omit `type` to create materials. Interview details are stored in a related table and deleted with their post.
+
+The additive `1_interview_experiences` migration runs automatically when updated Compose/Kubernetes post-service containers start. For local development, apply it with `npx prisma migrate deploy --schema services/post/prisma/schema.prisma` using the post database configuration, then regenerate the client with `npm run prisma:generate -w @interviewhub/post-service`.
 
 ---
 

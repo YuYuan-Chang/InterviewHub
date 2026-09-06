@@ -1,10 +1,17 @@
 import { z } from 'zod';
 import type { Prisma } from '../generated/prisma';
 import { prisma } from './db';
+import { postTypeSchema, stageSchema, difficultySchema, outcomeSchema } from './schemas';
 
 export const feedQuerySchema = z.object({
   sort: z.enum(['recent', 'popular']).optional().default('recent'),
   q: z.string().trim().min(1).max(100).optional(),
+  type: postTypeSchema.optional(),
+  company: z.string().trim().min(1).max(120).optional(),
+  role: z.string().trim().min(1).max(120).optional(),
+  stage: stageSchema.optional(),
+  difficulty: difficultySchema.optional(),
+  outcome: outcomeSchema.optional(),
   tag: z.string().min(1).max(60).optional(), // single-tag links (back-compat)
   tags: z.string().max(500).optional(), // comma-separated multi-tag filter
   authorId: z.string().uuid().optional(),
@@ -18,6 +25,12 @@ export function parseTagList(raw: string | undefined): string[] {
 }
 
 export interface FeedOptions {
+  type?: z.infer<typeof postTypeSchema>;
+  company?: string;
+  role?: string;
+  stage?: z.infer<typeof stageSchema>;
+  difficulty?: z.infer<typeof difficultySchema>;
+  outcome?: z.infer<typeof outcomeSchema>;
   sort: 'recent' | 'popular';
   q?: string;
   tagList?: string[]; // AND semantics: every selected tag must be present
@@ -34,7 +47,18 @@ export interface FeedOptions {
  * cursoring over a mutable ranking.
  */
 export async function queryFeed(opts: FeedOptions) {
+  const experience: Prisma.InterviewExperienceWhereInput = {
+    ...(opts.company ? { company: { contains: opts.company, mode: 'insensitive' } } : {}),
+    ...(opts.role ? { role: { contains: opts.role, mode: 'insensitive' } } : {}),
+    ...(opts.stage ? { stage: opts.stage } : {}),
+    ...(opts.difficulty ? { difficulty: opts.difficulty } : {}),
+    ...(opts.outcome ? { outcome: opts.outcome } : {}),
+  };
   const where: Prisma.PostWhereInput = {
+    AND: [
+      ...(opts.type === 'material' ? [{ interviewExperience: { is: null } }] : []),
+      ...(opts.type === 'experience' || Object.keys(experience).length ? [{ interviewExperience: { is: experience } }] : []),
+    ],
     ...(opts.tagList?.length ? { tags: { hasEvery: opts.tagList } } : {}),
     ...(opts.authorId ? { authorId: opts.authorId } : {}),
     ...(opts.authorIds ? { authorId: { in: opts.authorIds } } : {}),
@@ -44,6 +68,11 @@ export async function queryFeed(opts: FeedOptions) {
             { title: { contains: opts.q, mode: 'insensitive' } },
             { description: { contains: opts.q, mode: 'insensitive' } },
             { tags: { has: opts.q.toLowerCase() } },
+            { interviewExperience: { is: { OR: [
+              { company: { contains: opts.q, mode: 'insensitive' } },
+              { role: { contains: opts.q, mode: 'insensitive' } },
+              { questions: { contains: opts.q, mode: 'insensitive' } },
+            ] } } },
           ],
         }
       : {}),
@@ -55,6 +84,7 @@ export async function queryFeed(opts: FeedOptions) {
 
   const posts = await prisma.post.findMany({
     where,
+    include: { interviewExperience: true },
     orderBy,
     take: opts.limit + 1,
     ...(opts.afterId ? { cursor: { id: opts.afterId }, skip: 1 } : {}),

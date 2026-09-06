@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
   HttpError,
   authedUser,
@@ -16,24 +16,11 @@ import {
 import { prisma } from './db';
 import { config } from './config';
 import { enrichPosts } from './enrich';
-import { resumeTextSchema } from './resume';
 import { feedQuerySchema, parseTagList, popularTags, queryFeed } from './feed';
+import { createPostSchema } from './schemas';
 
 const userService = s2sClient(config.userServiceUrl, config.internalToken);
 const fileService = s2sClient(config.fileServiceUrl, config.internalToken);
-
-const createPostSchema = z.object({
-  title: z.string().min(3).max(160),
-  description: z.string().max(5000).optional().default(''),
-  tags: z
-    .array(z.string().min(1).max(60).transform((t) => t.trim().toLowerCase()))
-    .max(8)
-    .optional()
-    .default([]),
-  resumeText: resumeTextSchema.optional(),
-  fileId: z.string().uuid().optional(), // legacy single-file clients
-  fileIds: z.array(z.string().uuid()).max(8).optional().default([]),
-});
 
 interface FileMeta {
   id: string;
@@ -49,7 +36,7 @@ export const router: Router = Router();
 
 router.post('/api/posts', requireAuth(config.jwtPublicKey), validateBody(createPostSchema), async (req, res) => {
   const user = authedUser(req);
-  const { title, description, tags, fileId, fileIds, resumeText } = req.body;
+  const { title, description, tags, fileId, fileIds, interviewExperience, resumeText } = req.body as z.output<typeof createPostSchema>;
 
   const ids = [...new Set<string>([...fileIds, ...(fileId ? [fileId] : [])])];
   if (ids.length > 8) throw new HttpError(400, 'A post can have at most 8 attachments');
@@ -66,7 +53,9 @@ router.post('/api/posts', requireAuth(config.jwtPublicKey), validateBody(createP
       resumeText,
       tags: [...new Set<string>(tags)],
       attachments: files.map((f) => ({ fileId: f.id, name: f.name, mime: f.mime, sizeBytes: f.sizeBytes })),
+      ...(interviewExperience ? { interviewExperience: { create: interviewExperience } } : {}),
     },
+    include: { interviewExperience: true },
   });
   res.status(201).json((await enrichPosts([post], user.id))[0]);
 });
@@ -85,6 +74,12 @@ async function respondFeed(
   const { page, nextAfterId } = await queryFeed({
     sort: q.sort,
     q: q.q,
+    type: q.type,
+    company: q.company,
+    role: q.role,
+    stage: q.stage,
+    difficulty: q.difficulty,
+    outcome: q.outcome,
     tagList,
     authorId: q.authorId,
     authorIds,
@@ -117,7 +112,7 @@ router.get('/api/posts/tags/popular', async (_req, res) => {
 });
 
 router.get('/api/posts/:id', optionalAuth(config.jwtPublicKey), async (req, res) => {
-  const post = await prisma.post.findUnique({ where: { id: param(req, 'id') } });
+  const post = await prisma.post.findUnique({ where: { id: param(req, 'id') }, include: { interviewExperience: true } });
   if (!post) throw new HttpError(404, 'Post not found');
   res.json((await enrichPosts([post], req.user?.id))[0]);
 });

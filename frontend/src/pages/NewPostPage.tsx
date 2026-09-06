@@ -3,12 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { ACCEPT, UploadTray, useUploads } from '../components/UploadTray';
 import type { Post } from '../types';
+import { INTERVIEW_STAGES, INTERVIEW_DIFFICULTIES, INTERVIEW_OUTCOMES, type InterviewExperience } from '../interview';
+import { useQueryClient } from '@tanstack/react-query';
 
 const SUGGESTED_TAGS = ['swe intern', 'system design', 'behavioral', 'resume', 'ml engineer', 'new grad'];
 
 export function NewPostPage() {
   const navigate = useNavigate();
-  const [resumeReview, setResumeReview] = useState(false);
+  const queryClient = useQueryClient();
+  const [type, setType] = useState<'material' | 'experience' | 'resume'>('material');
+  const [experience, setExperience] = useState<InterviewExperience>({
+    company: '', role: '', stage: 'technical', questions: '', difficulty: 'medium', outcome: 'pending',
+  });
+  const resumeReview = type === 'resume';
   const [resumeText, setResumeText] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -39,8 +46,14 @@ export function NewPostPage() {
     setBusy(true);
     try {
       const post = await api<Post>('/api/posts', {
-        body: { title, description, tags, fileIds: uploads.fileIds, ...(resumeReview ? { resumeText } : {}) },
+        body: { title, description, tags, fileIds: uploads.fileIds, type: resumeReview ? 'material' : type,
+          ...(resumeReview ? { resumeText } : {}),
+          ...(type === 'experience' ? { interviewExperience: experience } : {}),
+        },
       });
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      void queryClient.invalidateQueries({ queryKey: ['popular-tags'] });
+      void queryClient.invalidateQueries({ queryKey: ['search-posts'] });
       navigate(`/posts/${post.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create post');
@@ -52,13 +65,17 @@ export function NewPostPage() {
   return (
     <div className="card form-card">
       <span className="eyebrow">PASS IT FORWARD</span>
-      <h1>{resumeReview ? 'Share your resume' : 'Share a resource'}</h1>
+      <h1>{resumeReview ? 'Share your resume' : type === 'experience' ? 'Share your interview experience' : 'Share a resource'}</h1>
       <p className="page-note">{resumeReview ? 'Get specific edits from your peers, review the diff, and accept the changes you want.' : 'Interview notes, a useful guide, or a lesson learned. Help someone take their next step.'}</p>
-      <div className="resume-actions" aria-label="Post type">
-        <button type="button" className={`btn ${!resumeReview ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={!resumeReview} onClick={() => setResumeReview(false)}>Resource</button>
-        <button type="button" className={`btn ${resumeReview ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={resumeReview} onClick={() => setResumeReview(true)}>Resume review</button>
-      </div>
       <form onSubmit={onSubmit} className="form">
+        <label>
+          Post type
+          <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
+            <option value="material">Prep material</option>
+            <option value="experience">Interview experience</option>
+            <option value="resume">Resume review</option>
+          </select>
+        </label>
         <label>
           Title
           <input
@@ -66,13 +83,51 @@ export function NewPostPage() {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. My Google SWE intern interview notes"
             minLength={3}
+            maxLength={160}
             required
           />
         </label>
+        {type === 'experience' && (
+          <fieldset className="experience-fields">
+            <legend>Interview details</legend>
+            <p className="page-note attach-hint">Help others prepare by sharing what you were asked and how it went. All fields below are required.</p>
+            <div className="experience-form-grid">
+              <label>Company
+                <input required maxLength={120} pattern=".*\S.*" value={experience.company} placeholder="e.g. Google"
+                  onChange={(e) => setExperience({ ...experience, company: e.target.value })} />
+              </label>
+              <label>Role
+                <input required maxLength={120} pattern=".*\S.*" value={experience.role} placeholder="e.g. Software engineer intern"
+                  onChange={(e) => setExperience({ ...experience, role: e.target.value })} />
+              </label>
+              <label>Interview stage
+                <select value={experience.stage} onChange={(e) => setExperience({ ...experience, stage: e.target.value as InterviewExperience['stage'] })}>
+                  {Object.entries(INTERVIEW_STAGES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>Difficulty
+                <select value={experience.difficulty} onChange={(e) => setExperience({ ...experience, difficulty: e.target.value as InterviewExperience['difficulty'] })}>
+                  {Object.entries(INTERVIEW_DIFFICULTIES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>Outcome
+                <select value={experience.outcome} onChange={(e) => setExperience({ ...experience, outcome: e.target.value as InterviewExperience['outcome'] })}>
+                  {Object.entries(INTERVIEW_OUTCOMES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+            </div>
+            <label>Questions asked
+              <textarea required maxLength={5000} rows={5} value={experience.questions}
+                placeholder="What questions or exercises came up? Include any follow-up questions."
+                onChange={(e) => setExperience({ ...experience, questions: e.target.value })} />
+            </label>
+          </fieldset>
+        )}
         <label>
-          Description (optional)
+          {type === 'experience' ? 'Advice & reflections (optional)' : 'Description (optional)'}
           <textarea
             rows={4}
+            maxLength={5000}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What is this? What worked, what didn't?"

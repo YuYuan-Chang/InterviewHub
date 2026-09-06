@@ -1,3 +1,5 @@
+import type { InterviewExperience } from './interview';
+
 export interface AuthorSummary {
   userId: string;
   username: string;
@@ -27,6 +29,8 @@ export interface Attachment {
 }
 
 export interface Post {
+  type: 'material' | 'experience';
+  interviewExperience: InterviewExperience | null;
   id: string;
   authorId: string;
   title: string;

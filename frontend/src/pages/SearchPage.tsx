@@ -6,6 +6,8 @@ import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
 import { PostCard } from '../components/PostCard';
 import { Feedback, FeedLoading } from '../components/Feedback';
+import { ExperienceFilters } from '../components/ExperienceFilters';
+import { experienceFilterParams } from '../interview';
 import type { Page, Post, Profile } from '../types';
 
 function PersonRow({ person }: { person: Profile }) {
@@ -64,10 +66,11 @@ export function SearchPage() {
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
   const tab = params.get('tab') === 'people' ? 'people' : 'posts';
+  const filters = experienceFilterParams(params).toString();
 
   const postsQuery = useQuery({
-    queryKey: ['search-posts', q],
-    queryFn: () => api<Page<Post>>(`/api/posts/feed/explore?q=${encodeURIComponent(q)}&limit=30`),
+    queryKey: ['search-posts', q, filters],
+    queryFn: () => api<Page<Post>>(`/api/posts/feed/explore?q=${encodeURIComponent(q)}&limit=30&${filters}`),
     enabled: !!q && tab === 'posts',
   });
   const peopleQuery = useQuery({
@@ -103,6 +106,7 @@ export function SearchPage() {
 
       {tab === 'posts' && (
         <>
+          <ExperienceFilters />
           {postsQuery.data?.items.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
