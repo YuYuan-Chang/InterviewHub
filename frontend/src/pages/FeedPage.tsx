@@ -5,6 +5,8 @@ import { useAuth } from '../auth';
 import { PostCard } from '../components/PostCard';
 import { FilterBar } from '../components/FilterBar';
 import { Feedback, FeedLoading } from '../components/Feedback';
+import { ExperienceFilters } from '../components/ExperienceFilters';
+import { EXPERIENCE_FILTER_KEYS, experienceFilterParams } from '../interview';
 import type { Page, Post } from '../types';
 
 export function FeedPage({ mode }: { mode: 'explore' | 'following' }) {
@@ -12,11 +14,14 @@ export function FeedPage({ mode }: { mode: 'explore' | 'following' }) {
   const [params, setParams] = useSearchParams();
   const sort = params.get('sort') === 'popular' ? 'popular' : 'recent';
   const tags = params.get('tags') ?? '';
+  const filters = experienceFilterParams(params).toString();
+  const hasFilters = Boolean(tags || filters);
 
   const query = useInfiniteQuery({
-    queryKey: ['feed', mode, sort, tags],
+    queryKey: ['feed', mode, sort, tags, filters],
     queryFn: ({ pageParam }) => {
-      const qs = new URLSearchParams({ sort });
+      const qs = new URLSearchParams(filters);
+      qs.set('sort', sort);
       if (tags) qs.set('tags', tags);
       if (pageParam) qs.set('cursor', pageParam);
       return api<Page<Post>>(`/api/posts/feed/${mode}?${qs}`);
@@ -26,6 +31,14 @@ export function FeedPage({ mode }: { mode: 'explore' | 'following' }) {
   });
 
   const posts = query.data?.pages.flatMap((p) => p.items) ?? [];
+
+  function clearFilters() {
+    const next = new URLSearchParams(params);
+    next.delete('tags');
+    for (const key of EXPERIENCE_FILTER_KEYS) next.delete(key);
+    next.delete('cursor');
+    setParams(next, { replace: true });
+  }
 
   return (
     <div className="discovery-layout">
@@ -51,6 +64,7 @@ export function FeedPage({ mode }: { mode: 'explore' | 'following' }) {
           </NavLink>
         </nav>
         <FilterBar />
+        <ExperienceFilters />
 
         {query.isLoading && <FeedLoading />}
         {query.isError && (
@@ -62,14 +76,11 @@ export function FeedPage({ mode }: { mode: 'explore' | 'following' }) {
           </Feedback>
         )}
         {query.isSuccess && posts.length === 0 && (
-          <Feedback title={tags ? 'No resources match these topics' : mode === 'following' ? 'Build your prep circle' : 'Be the first to share'}>
-            <p>{tags ? 'Try fewer topics to discover more resources.' : mode === 'following'
+          <Feedback title={hasFilters ? (tags ? 'No resources match these topics' : 'No resources match these filters') : mode === 'following' ? 'Build your prep circle' : 'Be the first to share'}>
+            <p>{hasFilters ? (tags ? 'Try fewer topics to discover more resources.' : 'Try fewer filters to discover more resources.') : mode === 'following'
               ? 'Explore resources and follow their authors to see new posts here.'
               : 'Your notes or interview experience could help someone take their next step.'}</p>
-            {tags ? <button className="btn btn-ghost" onClick={() => {
-              params.delete('tags');
-              setParams(params, { replace: true });
-            }}>Clear filters</button> : <Link className="btn btn-primary" to={mode === 'following' ? '/' : me ? '/posts/new' : '/register'}>
+            {hasFilters ? <button className="btn btn-ghost" onClick={clearFilters}>Clear filters</button> : <Link className="btn btn-primary" to={mode === 'following' ? '/' : me ? '/posts/new' : '/register'}>
               {mode === 'following' ? 'Explore resources' : 'Share a resource'}
             </Link>}
           </Feedback>
