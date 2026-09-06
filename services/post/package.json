@@ -11,6 +11,7 @@
   "dependencies": {
     "@interviewhub/shared": "*",
     "@prisma/client": "^6.10.0",
+    "diff": "^9.0.0",
     "express": "^5.1.0",
     "prisma": "^6.10.0",
     "zod": "^3.25.0"

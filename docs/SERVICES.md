@@ -178,6 +178,20 @@ Pagination is keyset via Prisma's cursor API: the cursor payload is `{ afterId: 
 
 `GET /api/posts/tags/popular` is registered **before** `GET /api/posts/:id` — Express matches in order, otherwise `tags` would parse as a post id.
 
+### Resume review
+
+Post-service owns editable resume text and its revision history in `post_db`. `POST /api/posts` optionally accepts `resumeText` (nonblank, max 20,000 characters and 500 lines; CRLF normalized to LF). Responses include nullable `resumeText` and `resumeVersion` (initially 1). Existing posts remain ordinary resources. PDF attachments are reference copies and are never rewritten by a revision.
+
+| Endpoint | Auth | Contract |
+|---|---|---|
+| `GET /api/posts/:id/revisions` | public | Keyset-paginated `{ items, nextCursor }`; `cursor?`, `limit?` (default 20, max 50). Each proposal includes its author (batched user-service lookup, null on failure), base version, summary, proposed text, unified patch, status and timestamps. |
+| `POST /api/posts/:id/revisions` | JWT | `{ baseVersion, summary, proposedText }` or `{ baseVersion, summary, patch }`; exactly one input. Summary is 3–1000 trimmed characters. Patch max 100,000 characters; single-file unified diffs only, matched with zero fuzz. Returns `201` proposal. |
+| `PATCH /api/posts/:id/revisions/:revisionId` | owner JWT | `{ status: "accepted" | "rejected" }`. Acceptance updates text and increments version. Returns resolved proposal. |
+
+Invalid/empty/no-op revisions return `400`, missing posts/proposals `404`, non-owner decisions `403`, and stale versions or already resolved decisions `409`. Only pending proposals may be resolved; outdated proposals can still be rejected. Parent-row locking serializes proposal creation and decisions so simultaneous accepts cannot overwrite one another. Patches are applied only to strings, never filesystem paths. Resume text is displayed literally; Markdown/HTML is not executed.
+
+Migration `1_resume_revisions` adds `posts.resume_text`, `posts.resume_version`, and `resume_revisions` with a cascading post foreign key and a `(post_id, created_at DESC, id DESC)` pagination index. Resume history is stored locally; file bytes and discussion comments retain their existing owners. No new internal routes or notification event types are added. The post-service JSON request limit is 256 KB to accommodate patch payloads.
+
 ### 3.3 API — internal (`src/internal.ts`)
 
 | Endpoint | Caller | Contract |

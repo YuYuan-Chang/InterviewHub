@@ -73,6 +73,7 @@ Run that once after cloning, and re-run `npm run generate` after any `schema.pri
 - **File sharing** — PDF/notes uploads up to 10MB, with title, description, and tags (role, topic, company)
 - **Feeds** — *Following* (people you follow) and *Explore* (everything), sortable by recent/popular, filterable by tag
 - **Comments & Q&A** — threaded replies; post authors are notified of comments, users of new followers
+- **Resume reviews** — choose Resume review when posting, paste plain text or Markdown, and optionally attach a PDF. Peers propose edits with a diff preview or import a `.patch`/`.diff`; the owner accepts or rejects proposals. Download the current text and each unified patch. Version checks prevent stale proposals overwriting accepted changes. Attachments stay as originally uploaded.
 - **Reactions** — upvotes on both posts and comments
 - **Search** — one search bar covering posts (title/description/tags, via `?q=` on the explore feed) and people (username/name/school, via `/api/users/search`)
 - **Filters** — multi-tag filtering (`?tags=a,b`, AND semantics) with a chip bar fed by `/api/posts/tags/popular`

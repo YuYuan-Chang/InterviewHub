@@ -8,6 +8,8 @@ const SUGGESTED_TAGS = ['swe intern', 'system design', 'behavioral', 'resume', '
 
 export function NewPostPage() {
   const navigate = useNavigate();
+  const [resumeReview, setResumeReview] = useState(false);
+  const [resumeText, setResumeText] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -37,7 +39,7 @@ export function NewPostPage() {
     setBusy(true);
     try {
       const post = await api<Post>('/api/posts', {
-        body: { title, description, tags, fileIds: uploads.fileIds },
+        body: { title, description, tags, fileIds: uploads.fileIds, ...(resumeReview ? { resumeText } : {}) },
       });
       navigate(`/posts/${post.id}`);
     } catch (err) {
@@ -50,8 +52,12 @@ export function NewPostPage() {
   return (
     <div className="card form-card">
       <span className="eyebrow">PASS IT FORWARD</span>
-      <h1>Share a resource</h1>
-      <p className="page-note">Interview notes, a useful guide, or a lesson learned. Help someone take their next step.</p>
+      <h1>{resumeReview ? 'Share your resume' : 'Share a resource'}</h1>
+      <p className="page-note">{resumeReview ? 'Get specific edits from your peers, review the diff, and accept the changes you want.' : 'Interview notes, a useful guide, or a lesson learned. Help someone take their next step.'}</p>
+      <div className="resume-actions" aria-label="Post type">
+        <button type="button" className={`btn ${!resumeReview ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={!resumeReview} onClick={() => setResumeReview(false)}>Resource</button>
+        <button type="button" className={`btn ${resumeReview ? 'btn-primary' : 'btn-ghost'}`} aria-pressed={resumeReview} onClick={() => setResumeReview(true)}>Resume review</button>
+      </div>
       <form onSubmit={onSubmit} className="form">
         <label>
           Title
@@ -72,6 +78,15 @@ export function NewPostPage() {
             placeholder="What is this? What worked, what didn't?"
           />
         </label>
+        {resumeReview && (
+          <label>
+            Resume text
+            <textarea aria-label="Resume text" aria-describedby="resume-help resume-attachments-help" className="resume-editor" rows={16} value={resumeText} onChange={(e) => setResumeText(e.target.value)} maxLength={20000} required
+              placeholder={'# Your name\n\n## Experience\n- Built…\n\n## Education\n…'} />
+            <span id="resume-help" className="page-note">Paste plain text or Markdown, up to 20,000 characters and 500 lines. Others can propose line-by-line changes. You choose which to accept. This text will be public.</span>
+            <span id="resume-attachments-help" className="page-note">You can also attach your PDF below for reference. Accepted changes update the text; the PDF stays as uploaded.</span>
+          </label>
+        )}
         <label>
           Tags (role, topic, company…)
           <div className="tag-editor">

@@ -26,6 +26,9 @@ model Post {
   commentCount Int            @default(0) @map("comment_count")
   createdAt    DateTime       @default(now()) @map("created_at")
   reactions    PostReaction[]
+  resumeText   String?        @map("resume_text")
+  resumeVersion Int           @default(1) @map("resume_version")
+  revisions    ResumeRevision[]
 
   @@index([authorId])
   @@index([createdAt(sort: Desc)])
@@ -43,4 +46,21 @@ model PostReaction {
   @@id([postId, userId])
   @@index([userId])
   @@map("post_reactions")
+}
+
+model ResumeRevision {
+  id           String   @id @default(uuid())
+  postId       String   @map("post_id")
+  authorId     String   @map("author_id")
+  baseVersion  Int      @map("base_version")
+  proposedText String   @map("proposed_text")
+  patch        String
+  summary      String
+  status       String   @default("pending")
+  createdAt    DateTime @default(now()) @map("created_at")
+  resolvedAt   DateTime? @map("resolved_at")
+  post         Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("resume_revisions")
 }

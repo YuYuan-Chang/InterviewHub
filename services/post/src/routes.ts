@@ -16,6 +16,7 @@ import {
 import { prisma } from './db';
 import { config } from './config';
 import { enrichPosts } from './enrich';
+import { resumeTextSchema } from './resume';
 import { feedQuerySchema, parseTagList, popularTags, queryFeed } from './feed';
 
 const userService = s2sClient(config.userServiceUrl, config.internalToken);
@@ -29,6 +30,7 @@ const createPostSchema = z.object({
     .max(8)
     .optional()
     .default([]),
+  resumeText: resumeTextSchema.optional(),
   fileId: z.string().uuid().optional(), // legacy single-file clients
   fileIds: z.array(z.string().uuid()).max(8).optional().default([]),
 });
@@ -47,7 +49,7 @@ export const router: Router = Router();
 
 router.post('/api/posts', requireAuth(config.jwtPublicKey), validateBody(createPostSchema), async (req, res) => {
   const user = authedUser(req);
-  const { title, description, tags, fileId, fileIds } = req.body;
+  const { title, description, tags, fileId, fileIds, resumeText } = req.body;
 
   const ids = [...new Set<string>([...fileIds, ...(fileId ? [fileId] : [])])];
   if (ids.length > 8) throw new HttpError(400, 'A post can have at most 8 attachments');
@@ -61,6 +63,7 @@ router.post('/api/posts', requireAuth(config.jwtPublicKey), validateBody(createP
       authorId: user.id,
       title,
       description,
+      resumeText,
       tags: [...new Set<string>(tags)],
       attachments: files.map((f) => ({ fileId: f.id, name: f.name, mime: f.mime, sizeBytes: f.sizeBytes })),
     },
