@@ -6,11 +6,12 @@ import { useAuth } from '../auth';
 import { timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { AttachmentGrid } from './AttachmentGrid';
+import { InterviewDetails } from './InterviewDetails';
 import type { Post } from '../types';
 
 export { timeAgo }; // re-export: several pages import it from here
 
-export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post) => void }) {
+export function PostCard({ post, onChanged, expanded = false }: { post: Post; onChanged?: (p: Post) => void; expanded?: boolean }) {
   const { me } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -87,6 +88,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post
         <h3 className="post-title">
           <Link to={`/posts/${post.id}`}>{post.title}</Link>
         </h3>
+        {post.interviewExperience && <InterviewDetails experience={post.interviewExperience} expanded={expanded} />}
         {post.description && <p className="post-desc">{post.description}</p>}
         <AttachmentGrid attachments={post.attachments ?? []} />
         {post.tags.length > 0 && (

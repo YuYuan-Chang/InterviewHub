@@ -35,6 +35,7 @@ export function PostDetailPage() {
   return (
     <div>
       <PostCard
+        expanded
         post={postQuery.data}
         onChanged={(p) => queryClient.setQueryData(['post', id], p)}
       />

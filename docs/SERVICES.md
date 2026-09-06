@@ -161,6 +161,10 @@ No FK between `follows` and `profiles` — and no FK to `auth_db.users` is *poss
 
 ### 3.2 API — public
 
+Structured interview experiences are supported by `POST /api/posts` with `type: "experience"` and required `interviewExperience: { company, role, stage, questions, difficulty, outcome }`. Validation is defined in `src/schemas.ts`; omitted `type` defaults to `material`, and materials cannot include interview details. Creation inserts the post and related details atomically through a nested Prisma create. See the README's Interview experience API section for limits and allowed values.
+
+Every enriched post also includes `type: "material" | "experience"` and `interviewExperience` (null for materials). Both feeds support `type`, `company`, `role`, `stage`, `difficulty`, and `outcome` filters, combined with the existing filters and pagination. Company and role use case-insensitive substring matching; stage, difficulty, and outcome are exact matches. Free-text `q` additionally searches company, role, and questions. Type is derived from the presence of related details, so existing posts require no backfill.
+
 **Enriched post shape** (returned everywhere; built in `src/enrich.ts`): all `posts` columns, `createdAt` as ISO string, `attachments: [{ fileId, name, mime, sizeBytes }]` (legacy single-file rows are synthesized into this array), `author: { userId, username, displayName, school } | null`, `viewerHasUpvoted: boolean` (always false when anonymous).
 
 | Endpoint | Auth | Request | Success | Errors |
@@ -191,6 +195,7 @@ Pagination is keyset via Prisma's cursor API: the cursor payload is `{ afterId: 
 |---|---|---|
 | `posts` | `id` uuid PK · `author_id` uuid · `title` text · `description` text · `tags` text[] · `file_id`/`file_name`/`file_mime` text NULL + `file_size` int NULL (**legacy, no longer written**) · `attachments` jsonb default `[]` · `upvote_count` int default 0 · `comment_count` int default 0 · `created_at` | INDEX(`author_id`) · INDEX(`created_at` DESC) · INDEX(`upvote_count` DESC, `created_at` DESC) · **GIN INDEX(`tags`)** |
 | `post_reactions` | `post_id` uuid · `user_id` uuid · `created_at` | PK(`post_id`,`user_id`) · INDEX(`user_id`) · FK `post_id`→`posts.id` ON DELETE CASCADE |
+| `interview_experiences` | `post_id` text · `company`/`role` varchar(120) · `stage`/`questions`/`difficulty`/`outcome` text | PK(`post_id`) · INDEX(`company`,`role`) · FK `post_id`→`posts.id` ON DELETE CASCADE |
 
 The two composite indexes exactly match the two feed sort orders; the GIN index serves both `hasEvery` (multi-tag) and `has` (single-tag / q-as-tag) filters.
 
