@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
 import { PostCard } from '../components/PostCard';
+import { Feedback, FeedLoading } from '../components/Feedback';
 import type { Page, Post, Profile } from '../types';
 
 function PersonRow({ person }: { person: Profile }) {
@@ -80,24 +81,28 @@ export function SearchPage() {
     setParams(params, { replace: true });
   }
 
-  if (!q) return <p className="page-note">Type something in the search bar above.</p>;
+  const activeQuery = tab === 'posts' ? postsQuery : peopleQuery;
+
+  if (!q) return <Feedback title="Find your next resource"><p>Use the search bar to look for topics, companies, or people.</p><Link className="btn btn-ghost" to="/">Explore resources</Link></Feedback>;
 
   return (
     <div className="feed">
-      <h2 className="search-title">Results for “{q}”</h2>
-      <nav className="feed-tabs">
-        <button className={tab === 'posts' ? 'active' : ''} onClick={() => setTab('posts')}>
+      <span className="eyebrow">SEARCH THE COMMUNITY</span>
+      <h1 className="search-title">Results for “{q}”</h1>
+      <nav className="feed-tabs search-tabs" aria-label="Result type">
+        <button aria-pressed={tab === 'posts'} className={tab === 'posts' ? 'active' : ''} onClick={() => setTab('posts')}>
           Posts
         </button>
-        <button className={tab === 'people' ? 'active' : ''} onClick={() => setTab('people')}>
+        <button aria-pressed={tab === 'people'} className={tab === 'people' ? 'active' : ''} onClick={() => setTab('people')}>
           People
         </button>
       </nav>
+      {activeQuery.isLoading && <FeedLoading />}
+      {activeQuery.isError && <Feedback title="Search couldn’t finish" error><p>Please try again in a moment.</p><button className="btn btn-ghost" disabled={activeQuery.isFetching} onClick={() => void activeQuery.refetch()}>{activeQuery.isFetching ? 'Trying again…' : 'Try again'}</button></Feedback>}
+      {activeQuery.isSuccess && activeQuery.data?.items.length === 0 && <Feedback title={`No ${tab} found`}><p>Try a broader topic, a different name, or check your spelling.</p><Link className="btn btn-ghost" to="/">Explore resources</Link></Feedback>}
 
       {tab === 'posts' && (
         <>
-          {postsQuery.isLoading && <p className="page-note">Searching…</p>}
-          {postsQuery.data?.items.length === 0 && <p className="page-note">No posts match “{q}”.</p>}
           {postsQuery.data?.items.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
@@ -105,8 +110,6 @@ export function SearchPage() {
       )}
       {tab === 'people' && (
         <>
-          {peopleQuery.isLoading && <p className="page-note">Searching…</p>}
-          {peopleQuery.data?.items.length === 0 && <p className="page-note">No students match “{q}”.</p>}
           {peopleQuery.data?.items.map((person) => (
             <PersonRow key={person.userId} person={person} />
           ))}

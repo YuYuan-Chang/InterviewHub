@@ -15,24 +15,44 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
   async function toggleUpvote() {
     if (!me) {
       navigate('/login');
       return;
     }
-    const res = await api<{ upvoteCount: number; viewerHasUpvoted: boolean }>(
-      `/api/posts/${post.id}/upvote`,
-      { method: post.viewerHasUpvoted ? 'DELETE' : 'PUT' },
-    );
-    onChanged?.({ ...post, ...res });
-    void queryClient.invalidateQueries({ queryKey: ['feed'] });
+    setBusy(true);
+    setError('');
+    try {
+      const res = await api<{ upvoteCount: number; viewerHasUpvoted: boolean }>(
+        `/api/posts/${post.id}/upvote`,
+        { method: post.viewerHasUpvoted ? 'DELETE' : 'PUT' },
+      );
+      onChanged?.({ ...post, ...res });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['feed'] }),
+        queryClient.invalidateQueries({ queryKey: ['search-posts'] }),
+        queryClient.invalidateQueries({ queryKey: ['profile-posts'] }),
+        queryClient.invalidateQueries({ queryKey: ['post', post.id] }),
+      ]);
+    } catch {
+      setError('Your upvote couldn’t be updated. Please try again.');
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function copyLink() {
-    await navigator.clipboard.writeText(`${location.origin}/posts/${post.id}`).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+    setError('');
+    try {
+      await navigator.clipboard.writeText(`${location.origin}/posts/${post.id}`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setError('Couldn’t copy the link. Open the post and copy its address from your browser.');
+    }
   }
 
   const username = post.author?.username;
@@ -83,16 +103,20 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post
             className={`action ${post.viewerHasUpvoted ? 'action-active' : ''}`}
             onClick={toggleUpvote}
             title={post.viewerHasUpvoted ? 'Remove upvote' : 'Upvote'}
+            aria-label={post.viewerHasUpvoted ? 'Remove upvote' : 'Upvote'}
+            aria-pressed={post.viewerHasUpvoted}
+            disabled={busy}
           >
-            ▲ <span>{post.upvoteCount}</span>
+            ▲ <span>{post.upvoteCount} <span className="action-label">Helpful</span></span>
           </button>
           <Link to={`/posts/${post.id}`} className="action" title="Comments">
-            💬 <span>{post.commentCount}</span>
+            <span>{post.commentCount} {post.commentCount === 1 ? 'comment' : 'comments'}</span>
           </Link>
-          <button className="action" onClick={copyLink} title="Copy link">
-            {copied ? '✓ copied' : '🔗'}
+          <button className="action" onClick={copyLink} title="Copy link" aria-live="polite">
+            {copied ? '✓ Copied' : 'Copy link'}
           </button>
         </div>
+        {error && <p className="error" role="alert">{error}</p>}
       </div>
     </article>
   );
