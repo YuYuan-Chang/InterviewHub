@@ -37,7 +37,7 @@ npm run dev -w @interviewhub/post-service   # tsx watch
 
 ## Service anatomy
 
-Every service is the same five files, and the shape is load-bearing:
+Each service has its own `services/<svc>/CLAUDE.md` covering what it owns, its internal contract, and the things that break in it specifically. Every service is the same five files, and the shape is load-bearing:
 
 - **`index.ts`** — calls `initTracing()` **first**, then `await import('./app')`. The dynamic import is deliberate: OTel auto-instrumentation must patch express/undici before they load. Converting these to static imports silently breaks tracing.
 - **`app.ts`** — `buildApp()` composes shared middleware in a fixed order: `requestContext()` → `requestLogging()` → `installMetrics()` → `express.json()` → `healthRoutes()` → routes → `notFoundHandler` → `errorHandler()`.
