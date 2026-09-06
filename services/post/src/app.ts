@@ -10,6 +10,7 @@ import {
 import { logger } from './logger';
 import { prisma } from './db';
 import { router } from './routes';
+import { resumeRouter } from './resume-routes';
 import { internalRouter } from './internal';
 
 export function buildApp(): express.Express {
@@ -17,11 +18,12 @@ export function buildApp(): express.Express {
   app.use(requestContext());
   app.use(requestLogging(logger));
   installMetrics(app, 'post-service');
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: '256kb' }));
   healthRoutes(app, async () => {
     await prisma.$queryRaw`SELECT 1`;
   });
   app.use(router);
+  app.use(resumeRouter);
   app.use(internalRouter);
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

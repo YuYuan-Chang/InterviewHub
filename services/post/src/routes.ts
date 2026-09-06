@@ -36,7 +36,7 @@ export const router: Router = Router();
 
 router.post('/api/posts', requireAuth(config.jwtPublicKey), validateBody(createPostSchema), async (req, res) => {
   const user = authedUser(req);
-  const { title, description, tags, fileId, fileIds, interviewExperience } = req.body as z.output<typeof createPostSchema>;
+  const { title, description, tags, fileId, fileIds, interviewExperience, resumeText } = req.body as z.output<typeof createPostSchema>;
 
   const ids = [...new Set<string>([...fileIds, ...(fileId ? [fileId] : [])])];
   if (ids.length > 8) throw new HttpError(400, 'A post can have at most 8 attachments');
@@ -50,6 +50,7 @@ router.post('/api/posts', requireAuth(config.jwtPublicKey), validateBody(createP
       authorId: user.id,
       title,
       description,
+      resumeText,
       tags: [...new Set<string>(tags)],
       attachments: files.map((f) => ({ fileId: f.id, name: f.name, mime: f.mime, sizeBytes: f.sizeBytes })),
       ...(interviewExperience ? { interviewExperience: { create: interviewExperience } } : {}),

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resumeTextSchema } from './resume';
 
 export const postTypeSchema = z.enum(['material', 'experience']);
 export const stageSchema = z.enum(['recruiter_screen', 'online_assessment', 'technical', 'system_design', 'behavioral', 'onsite', 'other']);
@@ -18,6 +19,7 @@ export const createPostSchema = z.object({
   title: z.string().trim().min(3).max(160),
   description: z.string().max(5000).optional().default(''),
   tags: z.array(z.string().trim().min(1).max(60).transform((t) => t.toLowerCase())).max(8).optional().default([]),
+  resumeText: resumeTextSchema.optional(),
   fileId: z.string().uuid().optional(), // legacy single-file clients
   fileIds: z.array(z.string().uuid()).max(8).optional().default([]),
   type: postTypeSchema.optional().default('material'),

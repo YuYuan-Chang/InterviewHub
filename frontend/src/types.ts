@@ -37,6 +37,8 @@ export interface Post {
   description: string;
   tags: string[];
   attachments: Attachment[];
+  resumeText: string | null;
+  resumeVersion: number;
   upvoteCount: number;
   commentCount: number;
   createdAt: string;
@@ -76,4 +78,18 @@ export interface Page<T> {
 export interface TagCount {
   tag: string;
   count: number;
+}
+
+export interface ResumeRevision {
+  id: string;
+  postId: string;
+  authorId: string;
+  baseVersion: number;
+  proposedText: string;
+  patch: string;
+  summary: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  resolvedAt: string | null;
+  author: AuthorSummary | null;
 }

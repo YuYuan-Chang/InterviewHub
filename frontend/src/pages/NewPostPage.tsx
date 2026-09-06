@@ -11,10 +11,12 @@ const SUGGESTED_TAGS = ['swe intern', 'system design', 'behavioral', 'resume', '
 export function NewPostPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [type, setType] = useState<'material' | 'experience'>('material');
+  const [type, setType] = useState<'material' | 'experience' | 'resume'>('material');
   const [experience, setExperience] = useState<InterviewExperience>({
     company: '', role: '', stage: 'technical', questions: '', difficulty: 'medium', outcome: 'pending',
   });
+  const resumeReview = type === 'resume';
+  const [resumeText, setResumeText] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -44,7 +46,8 @@ export function NewPostPage() {
     setBusy(true);
     try {
       const post = await api<Post>('/api/posts', {
-        body: { title, description, tags, fileIds: uploads.fileIds, type,
+        body: { title, description, tags, fileIds: uploads.fileIds, type: resumeReview ? 'material' : type,
+          ...(resumeReview ? { resumeText } : {}),
           ...(type === 'experience' ? { interviewExperience: experience } : {}),
         },
       });
@@ -62,14 +65,15 @@ export function NewPostPage() {
   return (
     <div className="card form-card">
       <span className="eyebrow">PASS IT FORWARD</span>
-      <h1>{type === 'experience' ? 'Share your interview experience' : 'Share a resource'}</h1>
-      <p className="page-note">Interview notes, a useful guide, or a lesson learned. Help someone take their next step.</p>
+      <h1>{resumeReview ? 'Share your resume' : type === 'experience' ? 'Share your interview experience' : 'Share a resource'}</h1>
+      <p className="page-note">{resumeReview ? 'Get specific edits from your peers, review the diff, and accept the changes you want.' : 'Interview notes, a useful guide, or a lesson learned. Help someone take their next step.'}</p>
       <form onSubmit={onSubmit} className="form">
         <label>
           Post type
           <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
             <option value="material">Prep material</option>
             <option value="experience">Interview experience</option>
+            <option value="resume">Resume review</option>
           </select>
         </label>
         <label>
@@ -129,6 +133,15 @@ export function NewPostPage() {
             placeholder="What is this? What worked, what didn't?"
           />
         </label>
+        {resumeReview && (
+          <label>
+            Resume text
+            <textarea aria-label="Resume text" aria-describedby="resume-help resume-attachments-help" className="resume-editor" rows={16} value={resumeText} onChange={(e) => setResumeText(e.target.value)} maxLength={20000} required
+              placeholder={'# Your name\n\n## Experience\n- Built…\n\n## Education\n…'} />
+            <span id="resume-help" className="page-note">Paste plain text or Markdown, up to 20,000 characters and 500 lines. Others can propose line-by-line changes. You choose which to accept. This text will be public.</span>
+            <span id="resume-attachments-help" className="page-note">You can also attach your PDF below for reference. Accepted changes update the text; the PDF stays as uploaded.</span>
+          </label>
+        )}
         <label>
           Tags (role, topic, company…)
           <div className="tag-editor">

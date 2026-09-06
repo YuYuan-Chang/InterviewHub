@@ -15,6 +15,18 @@ describe('post creation contract', () => {
     });
   });
 
+  it('preserves resume text through the shared post validator', () => {
+    expect(createPostSchema.parse({ title: 'Review my resume', resumeText: '# Alex\r\nExperience' })).toMatchObject({
+      type: 'material', resumeText: '# Alex\nExperience',
+    });
+  });
+
+  it('rejects invalid resume text when creating a post', () => {
+    for (const resumeText of ['   ', 'x'.repeat(20001), 'x\n'.repeat(501)]) {
+      expect(createPostSchema.safeParse({ title: 'Review my resume', resumeText }).success).toBe(false);
+    }
+  });
+
   it('normalizes interview text while preserving question line breaks', () => {
     expect(createPostSchema.parse(experience).interviewExperience).toMatchObject({
       company: 'Example Corp', role: 'Software engineer', questions: 'Design an LRU cache.\nHow would you test it?',

@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { api } from '../api';
+import { ResumeReview } from '../components/ResumeReview';
 import { PostCard } from '../components/PostCard';
 import { CommentForm, CommentThread } from '../components/CommentThread';
 import { useAuth } from '../auth';
@@ -39,6 +40,7 @@ export function PostDetailPage() {
         post={postQuery.data}
         onChanged={(p) => queryClient.setQueryData(['post', id], p)}
       />
+      {postQuery.data.resumeText != null && <ResumeReview key={postQuery.data.id} post={postQuery.data} />}
       <section className="card">
         <h3>
           {total} comment{total === 1 ? '' : 's'}

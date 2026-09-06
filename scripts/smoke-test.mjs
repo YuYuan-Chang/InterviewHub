@@ -239,6 +239,50 @@ async function main() {
   });
   check('9 attachments rejected with 400', tooMany.status === 400, `got ${tooMany.status}`);
 
+  console.log('— resume revisions');
+  const resume = await api('/api/posts', {
+    method: 'POST', token: bob.accessToken,
+    body: { title: 'Review my engineering resume', tags: ['resume'], resumeText: '# Bob\n- Built an API\n' },
+  });
+  check('resume post persists editable text', resume.status === 201 && resume.data.resumeVersion === 1 && resume.data.resumeText.includes('Built an API'));
+  const revisionPath = `/api/posts/${resume.data.id}/revisions`;
+  const proposalBody = { baseVersion: 1, summary: 'Show measurable impact', proposedText: '# Bob\n- Built an API serving 1,000 users\n' };
+  const anonRevision = await api(revisionPath, { method: 'POST', body: proposalBody });
+  check('anonymous revision rejected', anonRevision.status === 401);
+  const proposal = await api(revisionPath, { method: 'POST', token: alice.accessToken, body: proposalBody });
+  check('peer can propose a revision with unified diff', proposal.status === 201 && proposal.data.patch.includes('--- a/resume.md') && proposal.data.status === 'pending');
+  const imported = await api(revisionPath, { method: 'POST', token: alice.accessToken, body: { baseVersion: 1, summary: 'Imported patch proposal', patch: proposal.data.patch } });
+  check('exported patch can be imported', imported.status === 201 && imported.data.proposedText === proposalBody.proposedText);
+  const nonOwner = await api(`${revisionPath}/${proposal.data.id}`, { method: 'PATCH', token: alice.accessToken, body: { status: 'accepted' } });
+  check('only owner can accept revisions', nonOwner.status === 403);
+  const decisions = await Promise.all([proposal, imported].map((candidate) => api(`${revisionPath}/${candidate.data.id}`, {
+    method: 'PATCH', token: bob.accessToken, body: { status: 'accepted' },
+  })));
+  check('concurrent acceptance applies exactly one revision', decisions.filter((result) => result.status === 200).length === 1 && decisions.filter((result) => result.status === 409).length === 1);
+  const resumeAfter = await api(`/api/posts/${resume.data.id}`);
+  check('accepted revision updates text and increments version once', resumeAfter.data.resumeText === proposalBody.proposedText && resumeAfter.data.resumeVersion === 2);
+  const staleProposal = await api(revisionPath, { method: 'POST', token: alice.accessToken, body: proposalBody });
+  check('new proposals against an old version rejected', staleProposal.status === 409);
+  const history = await api(revisionPath + '?limit=1');
+  const nextHistory = await api(revisionPath + '?limit=1&cursor=' + encodeURIComponent(history.data.nextCursor));
+  check('public revision history paginates and includes authors', history.status === 200 && history.data.items.length === 1 && history.data.items[0].author.userId === alice.user.id && nextHistory.data.items.length === 1 && history.data.items[0].id !== nextHistory.data.items[0].id && nextHistory.data.nextCursor === null);
+  const pendingId = decisions[0].status === 409 ? proposal.data.id : imported.data.id;
+  const rejected = await api(`${revisionPath}/${pendingId}`, { method: 'PATCH', token: bob.accessToken, body: { status: 'rejected' } });
+  check('owner can reject an outdated proposal', rejected.status === 200 && rejected.data.status === 'rejected');
+  const repeat = await api(`${revisionPath}/${pendingId}`, { method: 'PATCH', token: bob.accessToken, body: { status: 'accepted' } });
+  check('resolved proposals cannot be accepted again', repeat.status === 409);
+  const noChange = await api(revisionPath, { method: 'POST', token: alice.accessToken, body: { ...proposalBody, baseVersion: 2 } });
+  check('unchanged revision rejected', noChange.status === 400);
+  const invalidPatch = await api(revisionPath, { method: 'POST', token: alice.accessToken, body: { baseVersion: 2, summary: 'Invalid patch', patch: 'not a diff' } });
+  check('invalid patch rejected', invalidPatch.status === 400);
+  const ordinaryPostRevision = await api(`/api/posts/${post2.data.id}/revisions`, { method: 'POST', token: alice.accessToken, body: proposalBody });
+  check('ordinary posts cannot receive resume revisions', ordinaryPostRevision.status === 400);
+  const foreignRevision = await api(`/api/posts/${post2.data.id}/revisions/${proposal.data.id}`, { method: 'PATCH', token: alice.accessToken, body: { status: 'accepted' } });
+  check('revision must belong to the target post', foreignRevision.status === 404);
+  await api(`/api/posts/${resume.data.id}`, { method: 'DELETE', token: bob.accessToken });
+  const deletedRevisions = await api(revisionPath);
+  check('deleted resume revisions are no longer accessible', deletedRevisions.status === 404);
+
   console.log('— profile editing');
   const profilePatch = await api('/api/users/me', {
     method: 'PATCH',

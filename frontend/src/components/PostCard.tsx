@@ -88,6 +88,7 @@ export function PostCard({ post, onChanged, expanded = false }: { post: Post; on
         <h3 className="post-title">
           <Link to={`/posts/${post.id}`}>{post.title}</Link>
         </h3>
+        {post.resumeText != null && <Link className="tag" to={`/posts/${post.id}#resume`}>Resume review · v{post.resumeVersion}</Link>}
         {post.interviewExperience && <InterviewDetails experience={post.interviewExperience} expanded={expanded} />}
         {post.description && <p className="post-desc">{post.description}</p>}
         <AttachmentGrid attachments={post.attachments ?? []} />

@@ -1574,6 +1574,30 @@ h1 {
   }
 }
 
+/* Resume review */
+.resume-review { scroll-margin-top: 90px; }
+.resume-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
+.resume-heading h2 { margin: 0.25rem 0; }
+.resume-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }
+.resume-document { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; padding: 1.5rem; border: 1px solid var(--border); background: var(--surface); border-radius: 8px; line-height: 1.8; max-height: 680px; overflow: auto; }
+.form .resume-editor { font: 0.85rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; resize: vertical; min-height: 220px; width: 100%; tab-size: 2; }
+.revision-form, .revision-history { border-top: 1px solid var(--border); margin-top: 1.5rem; padding-top: 1rem; }
+.revision-fields { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 0.9rem; }
+.resume-diff { overflow: auto; max-height: 500px; font: 0.8rem/1.7 ui-monospace, SFMono-Regular, Consolas, monospace; border: 1px solid var(--border); border-radius: 8px; background: #f8fafc; margin: 0.75rem 0; }
+.resume-diff span { display: block; min-width: 100%; width: max-content; padding: 0 0.75rem; white-space: pre; }
+.resume-diff .diff-add { background: #dcfce7; color: #14532d; }
+.resume-diff .diff-remove { background: #fee2e2; color: #7f1d1d; }
+.resume-diff .diff-heading { background: #e0f2fe; color: #075985; }
+.revision-card { border: 1px solid var(--border); border-radius: 10px; padding: 1rem; margin: 0.8rem 0; }
+.revision-card details summary { cursor: pointer; font-weight: 600; }
+.revision-summary { white-space: pre-wrap; overflow-wrap: anywhere; }
+.revision-status { font-size: 0.75rem; font-weight: 700; border-radius: 999px; padding: 0.2rem 0.7rem; text-transform: capitalize; }
+.status-pending { background: #fef3c7; color: #78350f; }
+.status-accepted { background: #dcfce7; color: #14532d; }
+.status-rejected { background: #f1f5f9; color: #475569; }
+.resume-review button:disabled { opacity: 0.5; cursor: default; }
+.revision-fields { grid-template-columns: minmax(0, 1fr); }
+.revision-fields label, .revision-fields input, .revision-fields textarea { min-width: 0; max-width: 100%; }
 /* ---- structured interview experiences ---- */
 .experience-fields {
   border: 1px solid var(--border);
