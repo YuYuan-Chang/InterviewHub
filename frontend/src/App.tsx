@@ -21,8 +21,9 @@ function RequireAuth({ children }: { children: JSX.Element }) {
 export function App() {
   return (
     <>
+      <a className="skip-link" href="#main-content">Skip to content</a>
       <Navbar />
-      <main className="container">
+      <main className="container" id="main-content" tabIndex={-1}>
         <Routes>
           <Route path="/" element={<FeedPage mode="explore" />} />
           <Route path="/following" element={<RequireAuth><FeedPage mode="following" /></RequireAuth>} />

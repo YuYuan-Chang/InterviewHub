@@ -9,6 +9,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -26,17 +27,22 @@ export function LoginPage() {
 
   return (
     <div className="auth-card card">
-      <h2>Welcome back</h2>
+      <span className="eyebrow">YOUR PREP COMMUNITY</span>
+      <h1>Welcome back</h1>
+      <p className="page-note">Pick up where you left off. Your next step starts here.</p>
       <form onSubmit={onSubmit} className="form">
         <label>
           Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <input type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </label>
         <label>
           Password
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <span className="password-field">
+            <input aria-label="Password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+            <button type="button" className="password-toggle" aria-pressed={showPassword} aria-label="Show password" onClick={() => setShowPassword(!showPassword)}>{showPassword ? 'Hide' : 'Show'}</button>
+          </span>
         </label>
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
         <button className="btn btn-primary" disabled={busy}>
           {busy ? 'Logging in…' : 'Log in'}
         </button>

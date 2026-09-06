@@ -49,7 +49,9 @@ export function NewPostPage() {
 
   return (
     <div className="card form-card">
-      <h2>Share prep material</h2>
+      <span className="eyebrow">PASS IT FORWARD</span>
+      <h1>Share a resource</h1>
+      <p className="page-note">Interview notes, a useful guide, or a lesson learned. Help someone take their next step.</p>
       <form onSubmit={onSubmit} className="form">
         <label>
           Title
@@ -62,7 +64,7 @@ export function NewPostPage() {
           />
         </label>
         <label>
-          Description
+          Description (optional)
           <textarea
             rows={4}
             value={description}
@@ -75,7 +77,7 @@ export function NewPostPage() {
           <div className="tag-editor">
             {tags.map((t) => (
               <button type="button" key={t} className="tag tag-active" onClick={() => setTags(tags.filter((x) => x !== t))}>
-                {t} ✕
+                <span className="sr-only">Remove tag </span>{t} ✕
               </button>
             ))}
             <input
@@ -94,7 +96,7 @@ export function NewPostPage() {
         </label>
         <div className="tag-suggestions">
           {SUGGESTED_TAGS.filter((t) => !tags.includes(t)).map((t) => (
-            <button type="button" key={t} className="tag" onClick={() => addTag(t)}>
+            <button type="button" key={t} className="tag" disabled={tags.length >= 8} onClick={() => addTag(t)}>
               + {t}
             </button>
           ))}
@@ -124,7 +126,7 @@ export function NewPostPage() {
           <p className="page-note attach-hint">Images, videos, PDFs & docs — up to 8 files, 10MB each.</p>
         </div>
 
-        {error && <p className="error">{error}</p>}
+        {error && <p className="error" role="alert">{error}</p>}
         <button className="btn btn-primary" disabled={busy || uploads.uploading}>
           {busy ? 'Publishing…' : uploads.uploading ? 'Uploading…' : 'Publish'}
         </button>

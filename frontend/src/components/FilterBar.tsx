@@ -25,22 +25,29 @@ export function FilterBar() {
     setParams(params, { replace: true });
   }
 
-  const chips = [...new Set([...selected, ...(data?.tags.map((t) => t.tag) ?? [])])].slice(0, 14);
+  const chips = [...new Set([...selected, ...(data?.tags.map((t) => t.tag) ?? []).slice(0, 14)])];
 
   return (
     <div className="filter-bar">
-      <div className="filter-chips">
+      <div className="filter-chips" role="group" aria-label="Filter by topic">
         {chips.map((tag) => (
           <button
             key={tag}
             className={`tag ${selected.includes(tag) ? 'tag-active' : ''}`}
             onClick={() => toggleTag(tag)}
+            aria-pressed={selected.includes(tag)}
           >
             {tag}
             {selected.includes(tag) && ' ✕'}
           </button>
         ))}
-        {chips.length === 0 && <span className="page-note">No tags yet</span>}
+        {chips.length === 0 && <span className="page-note">Browse all topics</span>}
+        {selected.length > 0 && (
+          <button className="clear-filters" onClick={() => {
+            params.delete('tags');
+            setParams(params, { replace: true });
+          }}>Clear filters</button>
+        )}
       </div>
       <select
         value={sort}
@@ -51,7 +58,7 @@ export function FilterBar() {
         aria-label="Sort"
       >
         <option value="recent">Newest</option>
-        <option value="popular">Top</option>
+        <option value="popular">Most upvoted</option>
       </select>
     </div>
   );

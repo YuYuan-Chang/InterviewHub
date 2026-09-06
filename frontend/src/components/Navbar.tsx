@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -9,6 +9,11 @@ export function Navbar() {
   const { me, logout } = useAuth();
   const navigate = useNavigate();
   const [q, setQ] = useState('');
+  const location = useLocation();
+
+  useEffect(() => {
+    setQ(new URLSearchParams(location.search).get('q') ?? '');
+  }, [location.search]);
 
   const { data } = useQuery({
     queryKey: ['notifications', 'badge'],
@@ -27,27 +32,37 @@ export function Navbar() {
   return (
     <header className="navbar">
       <Link to="/" className="brand">
+        <span className="brand-mark" aria-hidden="true">ih</span>
         Interview<span>Hub</span>
       </Link>
+      <nav className="primary-nav" aria-label="Main navigation">
+        <NavLink to="/" end>Explore</NavLink>
+        {me && <NavLink to="/following">Following</NavLink>}
+      </nav>
       <form className="search-form" onSubmit={submitSearch} role="search">
         <input
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search posts, tags, people…"
-          aria-label="Search"
+          aria-label="Search posts, tags, and people"
         />
+        <button type="submit" className="search-submit" aria-label="Submit search" disabled={!q.trim()}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" />
+          </svg>
+        </button>
       </form>
       <div className="navbar-actions">
         {me ? (
           <>
             <Link to="/posts/new" className="btn btn-primary">
-              Share
+              <span aria-hidden="true">＋ </span>Share
             </Link>
-            <Link to="/notifications" className="bell" title="Notifications">
+            <Link to="/notifications" className="bell" title="Notifications" aria-label={`Notifications${unread ? `, ${unread} unread` : ''}`}>
               🔔{unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
             </Link>
-            <Link to={`/u/${me.username}`} className="nav-user" title={`@${me.username}`}>
+            <Link to={`/u/${me.username}`} className="nav-user" title={`@${me.username}`} aria-label="Your profile">
               <Avatar username={me.username} displayName={me.displayName} fileId={me.avatarFileId} size="sm" />
             </Link>
             <button
