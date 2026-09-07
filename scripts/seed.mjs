@@ -588,7 +588,32 @@ function votersFor(salt, authorIdx, count) {
   return out;
 }
 
-const stats = { users: 0, posts: 0, comments: 0, files: 0 };
+/** Public reading lists, so a fresh demo has collections to browse. */
+const COLLECTIONS = [
+  {
+    by: 0,
+    name: 'Big tech SWE loop',
+    description: 'Everything I reread the week before an onsite.',
+    isPrivate: false,
+    posts: [0, 1, 2],
+  },
+  {
+    by: 3,
+    name: 'Behavioral prep',
+    description: 'STAR stories and the questions that keep coming back.',
+    isPrivate: false,
+    posts: [4, 5],
+  },
+  {
+    by: 1,
+    name: 'Read later',
+    description: '',
+    isPrivate: true,
+    posts: [6, 7],
+  },
+];
+
+const stats = { users: 0, posts: 0, comments: 0, files: 0, collections: 0 };
 const tokens = [];
 
 async function seedUsers() {
@@ -720,15 +745,40 @@ async function seedComments(posts) {
   console.log(`comment threads: ${THREADS.length}`);
 }
 
+/** Idempotent: collections are keyed by (owner, name), and filing a post twice is a no-op. */
+async function seedCollections(posts) {
+  for (const spec of COLLECTIONS) {
+    const token = tokens[spec.by].accessToken;
+    const { items } = await api('/api/collections', { token });
+    let collection = items.find((c) => c.name === spec.name);
+    if (!collection) {
+      collection = await api('/api/collections', {
+        method: 'POST',
+        token,
+        body: { name: spec.name, description: spec.description, isPrivate: spec.isPrivate },
+      });
+      stats.collections++;
+    }
+    for (const index of spec.posts) {
+      const post = posts[index];
+      if (!post) continue;
+      await api(`/api/collections/${collection.id}/posts`, { method: 'POST', token, body: { postId: post.id } });
+    }
+  }
+  console.log(`collections: ${COLLECTIONS.length}`);
+}
+
 async function main() {
   await seedUsers();
   await seedFollows();
   const posts = await seedPosts();
   await seedComments(posts);
+  await seedCollections(posts);
 
   console.log(
     `\nSeed complete — ${stats.users} new users (${USERS.length} total), ` +
-      `${stats.posts} new posts (${POSTS.length} total), ${stats.comments} new comments, ${stats.files} files uploaded.`,
+      `${stats.posts} new posts (${POSTS.length} total), ${stats.comments} new comments, ` +
+      `${stats.collections} new collections (${COLLECTIONS.length} total), ${stats.files} files uploaded.`,
   );
   console.log('Log in as mchen@example.com / password123 (every seeded user shares that password).');
 }

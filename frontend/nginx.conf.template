@@ -21,6 +21,9 @@ server {
     location /api/auth          { set $auth_upstream http://auth-service:4001; proxy_pass $auth_upstream; }
     location /api/users         { set $user_upstream http://user-service:4002; proxy_pass $user_upstream; }
     location /api/posts         { set $post_upstream http://post-service:4003; proxy_pass $post_upstream; }
+    # saved posts + collections are owned by post-service too
+    location /api/bookmarks     { set $bookmark_upstream http://post-service:4003; proxy_pass $bookmark_upstream; }
+    location /api/collections   { set $collection_upstream http://post-service:4003; proxy_pass $collection_upstream; }
     location /api/files         { set $file_upstream http://file-service:4004; proxy_pass $file_upstream; }
     location /api/comments      { set $comment_upstream http://comment-service:4005; proxy_pass $comment_upstream; }
     location /api/notifications { set $notification_upstream http://notification-service:4006; proxy_pass $notification_upstream; }

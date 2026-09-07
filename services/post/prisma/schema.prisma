@@ -26,6 +26,8 @@ model Post {
   commentCount Int            @default(0) @map("comment_count")
   createdAt    DateTime       @default(now()) @map("created_at")
   reactions    PostReaction[]
+  bookmarks    Bookmark[]
+  collectedIn  CollectionItem[]
   resumeText   String?        @map("resume_text")
   resumeVersion Int           @default(1) @map("resume_version")
   revisions    ResumeRevision[]
@@ -78,4 +80,48 @@ model ResumeRevision {
 
   @@index([postId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("resume_revisions")
+}
+
+/// A post the user saved. Independent of collections: saving is the "keep this"
+/// signal, collections are optional folders over the same set. Every collected
+/// post is bookmarked, so viewerHasBookmarked needs only this table.
+model Bookmark {
+  postId    String   @map("post_id")
+  userId    String   @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([postId, userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("bookmarks")
+}
+
+model Collection {
+  id          String           @id @default(uuid())
+  ownerId     String           @map("owner_id")
+  name        String           @db.VarChar(80)
+  description String           @default("")
+  isPrivate   Boolean          @default(true) @map("is_private")
+  // denormalized like upvote_count: maintained inside the same transaction as the item row
+  itemCount   Int              @default(0) @map("item_count")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  items       CollectionItem[]
+
+  @@unique([ownerId, name])
+  @@index([ownerId, updatedAt(sort: Desc)])
+  @@map("collections")
+}
+
+model CollectionItem {
+  collectionId String     @map("collection_id")
+  postId       String     @map("post_id")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  post         Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, postId])
+  @@index([collectionId, createdAt(sort: Desc)])
+  @@index([postId])
+  @@map("collection_items")
 }

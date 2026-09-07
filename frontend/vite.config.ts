@@ -6,6 +6,8 @@ const routes: Record<string, number> = {
   '/api/auth': 4001,
   '/api/users': 4002,
   '/api/posts': 4003,
+  '/api/bookmarks': 4003,
+  '/api/collections': 4003,
   '/api/files': 4004,
   '/api/comments': 4005,
   '/api/notifications': 4006,

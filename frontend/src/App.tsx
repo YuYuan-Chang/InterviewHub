@@ -10,6 +10,8 @@ import { ProfilePage } from './pages/ProfilePage';
 import { NotificationsPage } from './pages/NotificationsPage';
 import { SearchPage } from './pages/SearchPage';
 import { EditProfilePage } from './pages/EditProfilePage';
+import { SavedPage } from './pages/SavedPage';
+import { CollectionPage } from './pages/CollectionPage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { me, loading } = useAuth();
@@ -33,6 +35,8 @@ export function App() {
           <Route path="/posts/:id" element={<PostDetailPage />} />
           <Route path="/u/:username" element={<ProfilePage />} />
           <Route path="/search" element={<SearchPage />} />
+          <Route path="/saved" element={<RequireAuth><SavedPage /></RequireAuth>} />
+          <Route path="/collections/:id" element={<CollectionPage />} />
           <Route path="/settings/profile" element={<RequireAuth><EditProfilePage /></RequireAuth>} />
           <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />

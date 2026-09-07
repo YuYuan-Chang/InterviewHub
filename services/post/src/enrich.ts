@@ -29,6 +29,7 @@ export interface EnrichedPost extends Omit<PostWithExperience, 'createdAt' | 'at
   attachments: AttachmentMeta[];
   author: AuthorSummary | null;
   viewerHasUpvoted: boolean;
+  viewerHasBookmarked: boolean;
 }
 
 /** New posts store attachments as JSON; legacy rows get their single file synthesized in. */
@@ -48,12 +49,13 @@ function attachmentsOf(p: Post): AttachmentMeta[] {
   return [];
 }
 
-/** Attach author profiles (batched S2S call) and the viewer's upvote state. */
+/** Attach author profiles (batched S2S call) and the viewer's upvote/save state. */
 export async function enrichPosts(posts: PostWithExperience[], viewerId?: string): Promise<EnrichedPost[]> {
   if (posts.length === 0) return [];
   const authorIds = [...new Set(posts.map((p) => p.authorId))];
+  const postIds = posts.map((p) => p.id);
 
-  const [profilesRes, reactions] = await Promise.all([
+  const [profilesRes, reactions, bookmarks] = await Promise.all([
     userService
       .post<{ profiles: AuthorSummary[] }>('/internal/profiles/batch', { ids: authorIds })
       .catch((err) => {
@@ -63,7 +65,13 @@ export async function enrichPosts(posts: PostWithExperience[], viewerId?: string
       }),
     viewerId
       ? prisma.postReaction.findMany({
-          where: { userId: viewerId, postId: { in: posts.map((p) => p.id) } },
+          where: { userId: viewerId, postId: { in: postIds } },
+          select: { postId: true },
+        })
+      : Promise.resolve([]),
+    viewerId
+      ? prisma.bookmark.findMany({
+          where: { userId: viewerId, postId: { in: postIds } },
           select: { postId: true },
         })
       : Promise.resolve([]),
@@ -71,6 +79,7 @@ export async function enrichPosts(posts: PostWithExperience[], viewerId?: string
 
   const authorsById = new Map(profilesRes.profiles.map((p) => [p.userId, p]));
   const upvoted = new Set(reactions.map((r) => r.postId));
+  const saved = new Set(bookmarks.map((b) => b.postId));
 
   return posts.map((p) => ({
     ...p,
@@ -79,5 +88,6 @@ export async function enrichPosts(posts: PostWithExperience[], viewerId?: string
     attachments: attachmentsOf(p),
     author: authorsById.get(p.authorId) ?? null,
     viewerHasUpvoted: upvoted.has(p.id),
+    viewerHasBookmarked: saved.has(p.id),
   }));
 }
