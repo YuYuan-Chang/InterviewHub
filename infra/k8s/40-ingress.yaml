@@ -23,6 +23,15 @@ spec:
             pathType: Prefix
             backend:
               service: { name: post-service, port: { number: 4003 } }
+          # saved posts + collections are owned by post-service too
+          - path: /api/bookmarks
+            pathType: Prefix
+            backend:
+              service: { name: post-service, port: { number: 4003 } }
+          - path: /api/collections
+            pathType: Prefix
+            backend:
+              service: { name: post-service, port: { number: 4003 } }
           - path: /api/files
             pathType: Prefix
             backend:

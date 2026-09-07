@@ -151,11 +151,11 @@ No FK between `follows` and `profiles` — and no FK to `auth_db.users` is *poss
 
 ## 3 · post-service
 
-`services/post` · port **4003** · database **post_db** · posts, feeds, tags, post upvotes — the busiest service
+`services/post` · port **4003** · database **post_db** · posts, feeds, tags, post upvotes, saved posts & collections — the busiest service
 
 ### 3.1 Purpose & responsibility
 
-**Owns:** post metadata (title, description, normalized lowercase tags, attachment manifest), both feeds (Explore incl. search + filters, Following), the popular-tags aggregation, post upvotes, and two denormalized counters (`upvote_count` maintained locally, `comment_count` maintained via callback from comment-service).
+**Owns:** post metadata (title, description, normalized lowercase tags, attachment manifest), both feeds (Explore incl. search + filters, Following), the popular-tags aggregation, post upvotes, bookmarks and user collections, and three denormalized counters (`upvote_count` and `collections.item_count` maintained locally, `comment_count` maintained via callback from comment-service).
 
 **Does not handle:** file bytes (file-service; posts store only an attachment manifest copied from file-service metadata at creation); comments (separate DB entirely — posts only carry the count); author display data (fetched per-request from user-service, never stored).
 
@@ -196,6 +196,30 @@ Invalid/empty/no-op revisions return `400`, missing posts/proposals `404`, non-o
 
 Migration `1_resume_revisions` adds `posts.resume_text`, `posts.resume_version`, and `resume_revisions` with a cascading post foreign key and a `(post_id, created_at DESC, id DESC)` pagination index. Resume history is stored locally; file bytes and discussion comments retain their existing owners. No new internal routes or notification event types are added. The post-service JSON request limit is 256 KB to accommodate patch payloads.
 
+### Bookmarks & collections
+
+Post-service owns saved posts and the collections that group them (`src/collections/` — `service.ts` for data access, `routes.ts` for handlers, `schemas.ts` for validation and cursor parsing). Two tables rather than one: `bookmarks` is "saved", `collection_items` is "filed in this folder". They are kept consistent in one direction — filing a post also inserts the bookmark, and un-saving deletes the post from every collection of that user — so `viewerHasBookmarked` is answerable from `bookmarks` alone. Removing a post from a collection leaves it saved; deleting a collection leaves its posts saved. Every enriched post response carries `viewerHasBookmarked`.
+
+Collections are **private by default**. A private collection answers `404` (not `403`) to anyone but its owner, so probing ids can't confirm existence. Limits: 50 collections per user, 500 posts per collection, name ≤80 chars (trimmed, internal whitespace collapsed, unique per owner, case-sensitive), description ≤300.
+
+| Endpoint | Auth | Contract |
+|---|---|---|
+| `GET /api/bookmarks` | JWT | `200 { items: [enriched], nextCursor }` — the viewer's saved posts, newest first; `cursor?`, `limit?` (clamped 20/50) |
+| `PUT /api/posts/:id/bookmark` | JWT | `201` first time, `200` when already saved → `{ viewerHasBookmarked: true }` · `404` unknown post (FK P2003 mapped) |
+| `DELETE /api/posts/:id/bookmark` | JWT | `200 { viewerHasBookmarked: false }` — also clears the post from all of the viewer's collections |
+| `GET /api/collections` | optional | `200 { items: [collection] }`. No `userId` → the viewer's own (needs JWT, else `401`). `?userId=` → that user's **public** collections (all of them if it's the viewer). `?postId=` adds `containsPost` to each of the viewer's own collections — one round-trip for the "Save to…" picker |
+| `POST /api/collections` | JWT | `{ name, description?, isPrivate? }` → `201` collection · `409` duplicate name (P2002 mapped) · `400` over the 50-collection cap |
+| `GET /api/collections/:id` | optional | `200` collection · `404` unknown **or private and not yours** |
+| `PATCH /api/collections/:id` | owner JWT | `{ name?, description?, isPrivate? }`, at least one field → `200` · `403` not owner · `409` duplicate name |
+| `DELETE /api/collections/:id` | owner JWT | `204`; items cascade, bookmarks are deliberately kept |
+| `GET /api/collections/:id/posts` | optional | `200 { items: [enriched], nextCursor }`, same privacy rule as the collection itself |
+| `POST /api/collections/:id/posts` | owner JWT | `{ postId }` → `201` first time, `200` when already filed; body is the updated collection with `containsPost: true`. Also saves the post · `400` over the 500-item cap · `404` unknown post |
+| `DELETE /api/collections/:id/posts/:postId` | owner JWT | `200` updated collection with `containsPost: false`; the bookmark survives |
+
+Both listings are keyset-paged on `created_at DESC` using the composite primary key as the Prisma cursor, so the cursor payload is `{ afterPostId }`. `parseItemCursor()` rejects any other shape with `400` rather than handing Prisma a bad cursor and returning `500`. Unlike `sort=popular`, these rows don't re-order between pages, so paging is stable.
+
+`/api/bookmarks` and `/api/collections` are top-level paths, so they are routed to post-service explicitly in `frontend/nginx.conf.template`, `frontend/vite.config.ts`, and `infra/k8s/40-ingress.yaml`.
+
 ### 3.3 API — internal (`src/internal.ts`)
 
 | Endpoint | Caller | Contract |
@@ -210,10 +234,13 @@ Migration `1_resume_revisions` adds `posts.resume_text`, `posts.resume_version`,
 | `posts` | `id` uuid PK · `author_id` uuid · `title` text · `description` text · `tags` text[] · `file_id`/`file_name`/`file_mime` text NULL + `file_size` int NULL (**legacy, no longer written**) · `attachments` jsonb default `[]` · `upvote_count` int default 0 · `comment_count` int default 0 · `created_at` | INDEX(`author_id`) · INDEX(`created_at` DESC) · INDEX(`upvote_count` DESC, `created_at` DESC) · **GIN INDEX(`tags`)** |
 | `post_reactions` | `post_id` uuid · `user_id` uuid · `created_at` | PK(`post_id`,`user_id`) · INDEX(`user_id`) · FK `post_id`→`posts.id` ON DELETE CASCADE |
 | `interview_experiences` | `post_id` text · `company`/`role` varchar(120) · `stage`/`questions`/`difficulty`/`outcome` text | PK(`post_id`) · INDEX(`company`,`role`) · FK `post_id`→`posts.id` ON DELETE CASCADE |
+| `bookmarks` | `post_id` uuid · `user_id` uuid · `created_at` | PK(`post_id`,`user_id`) · INDEX(`user_id`,`created_at` DESC) · FK `post_id`→`posts.id` ON DELETE CASCADE |
+| `collections` | `id` uuid PK · `owner_id` uuid · `name` varchar(80) · `description` text default `''` · `is_private` bool default true · `item_count` int default 0 · `created_at` · `updated_at` | UNIQUE(`owner_id`,`name`) · INDEX(`owner_id`,`updated_at` DESC) |
+| `collection_items` | `collection_id` uuid · `post_id` uuid · `created_at` | PK(`collection_id`,`post_id`) · INDEX(`collection_id`,`created_at` DESC) · INDEX(`post_id`) · FKs → `collections.id` / `posts.id`, both ON DELETE CASCADE |
 
 The two composite indexes exactly match the two feed sort orders; the GIN index serves both `hasEvery` (multi-tag) and `has` (single-tag / q-as-tag) filters.
 
-**Transactions:** upvote add/remove each run in `prisma.$transaction`: insert-or-skip the reaction row, and increment/decrement the counter **only if a row was actually created/deleted** — the counter provably cannot drift from the reaction rows, and double-taps are no-ops.
+**Transactions:** upvote add/remove each run in `prisma.$transaction`: insert-or-skip the reaction row, and increment/decrement the counter **only if a row was actually created/deleted** — the counter provably cannot drift from the reaction rows, and double-taps are no-ops. `collections.item_count` follows the same insert-or-skip rule. Its one extra hazard is the cascade: deleting a post removes `collection_items` rows without touching the counter, so `DELETE /api/posts/:id` goes through `deletePostAndFixCounters()`, which reads the affected collections *before* the delete and decrements them in the same transaction.
 
 **⚠️ Flags:**
 - `q` search uses ILIKE `contains` on `title`/`description` — no trigram/FTS index, so it's a sequential scan at scale. Fine now; first search-scale fix is `pg_trgm` or `tsvector`.

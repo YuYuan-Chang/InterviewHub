@@ -1,8 +1,8 @@
 # CLAUDE.md — post-service
 
-Port 4003 · database `post_db` · owns posts, tags, attachment manifests, feeds, post reactions, and the denormalized `upvote_count` / `comment_count` columns. File bytes belong to file-service and comment rows to comment-service. Read the root `CLAUDE.md` first — `src/enrich.ts` is the repo's reference implementation of cross-service enrichment.
+Port 4003 · database `post_db` · owns posts, tags, attachment manifests, feeds, post reactions, bookmarks & collections, and the denormalized `upvote_count` / `comment_count` / `item_count` columns. File bytes belong to file-service and comment rows to comment-service. Read the root `CLAUDE.md` first — `src/enrich.ts` is the repo's reference implementation of cross-service enrichment.
 
-Beyond the standard five files: **`src/feed.ts`** (query shaping, tag parsing, popular tags), **`src/enrich.ts`** (batched author + viewer-reaction hydration), **`src/internal.ts`** (comment-service callbacks).
+Beyond the standard five files: **`src/feed.ts`** (query shaping, tag parsing, popular tags), **`src/enrich.ts`** (batched author + viewer-reaction hydration), **`src/internal.ts`** (comment-service callbacks), **`src/collections/`** (saved posts and collections, service + routes + schemas).
 
 ## Route order
 
@@ -24,7 +24,7 @@ The Following feed fetches followee ids from user-service first and short-circui
 
 ## Enrichment must degrade, not fail
 
-`enrichPosts()` issues exactly two queries: one batched `/internal/profiles/batch` and one reactions lookup. The profile call has a `.catch()` that logs and returns no profiles, so posts render with `author: null` when user-service is down. Preserve that catch, and preserve the batching — a per-post profile fetch turns every feed page into an N+1.
+`enrichPosts()` issues exactly three queries in one `Promise.all`: one batched `/internal/profiles/batch`, one reactions lookup, and one bookmarks lookup (the last two only when there is a viewer). The profile call has a `.catch()` that logs and returns no profiles, so posts render with `author: null` when user-service is down. Preserve that catch, and preserve the batching — a per-post profile fetch turns every feed page into an N+1.
 
 ## Counters
 
@@ -32,4 +32,16 @@ Upvote and un-upvote both run in a `$transaction`: `createMany`/`deleteMany` fir
 
 `/internal/posts/:id/comment-count` deliberately swallows update failures — the post may have been deleted between the comment insert and the callback.
 
-Only `0_init` exists under `prisma/migrations/`. Adding a feed filter or sort key usually means adding an index in the same migration.
+`collections.item_count` follows the same rule, with one extra hazard: `ON DELETE CASCADE` removes `collection_items` rows without touching the counter, so deleting a post goes through `deletePostAndFixCounters()`, which reads the affected collections *before* the delete and decrements them in the same transaction. Never call `prisma.post.delete()` directly.
+
+Adding a feed filter or sort key usually means adding an index in the same migration.
+
+## Bookmarks and collections
+
+Two states, deliberately not one: a `bookmarks` row is "saved", a `collection_items` row is "filed in this folder". They are kept consistent in one direction — filing a post also inserts the bookmark, and un-saving deletes the post from every collection of that user — so `viewerHasBookmarked` can be answered from `bookmarks` alone. Removing a post from a collection leaves it saved; deleting a collection leaves its posts saved.
+
+Collections are private by default and a private one answers **404**, not 403, for anyone but its owner, so listing them can't confirm that an id exists. `GET /api/collections?userId=` returns only public collections unless the viewer is the owner; `?postId=` annotates the viewer's own list with `containsPost` for the "Save to…" picker, in one round-trip instead of one request per collection.
+
+Both saved feeds are keyset-paged on `created_at DESC` with the composite primary key as the Prisma cursor, so the cursor payload is `{ afterPostId }` — parsed by `parseItemCursor()`, which rejects anything else with a 400 rather than handing Prisma a bad cursor and returning a 500. Unlike `sort=popular`, these rows don't re-order, so paging is stable.
+
+`/api/bookmarks` and `/api/collections` are separate top-level paths, so they need their own entries in `frontend/nginx.conf.template`, `frontend/vite.config.ts`, and `infra/k8s/40-ingress.yaml` — all three point at post-service:4003.

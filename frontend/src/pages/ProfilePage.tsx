@@ -5,7 +5,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { PostCard } from '../components/PostCard';
 import { Avatar } from '../components/Avatar';
-import type { AuthorSummary, Page, Post, Profile } from '../types';
+import { CollectionList } from './SavedPage';
+import type { AuthorSummary, Collection, Page, Post, Profile } from '../types';
 
 type ListKind = 'followers' | 'following' | null;
 
@@ -26,6 +27,13 @@ export function ProfilePage() {
   const postsQuery = useQuery({
     queryKey: ['profile-posts', profile?.userId],
     queryFn: () => api<Page<Post>>(`/api/posts/feed/explore?authorId=${profile!.userId}&limit=50`),
+    enabled: !!profile,
+  });
+
+  // public collections only — the server filters private ones out for other viewers
+  const collectionsQuery = useQuery({
+    queryKey: ['collections', 'of-user', profile?.userId],
+    queryFn: () => api<{ items: Collection[] }>(`/api/collections?userId=${profile!.userId}`),
     enabled: !!profile,
   });
 
@@ -98,6 +106,13 @@ export function ProfilePage() {
               {u.school ? ` (${u.school})` : ''}
             </p>
           ))}
+        </section>
+      )}
+
+      {(collectionsQuery.data?.items.length ?? 0) > 0 && (
+        <section className="card">
+          <h3>{isSelf ? 'Your public collections' : 'Collections'}</h3>
+          <CollectionList items={collectionsQuery.data?.items} />
         </section>
       )}
 

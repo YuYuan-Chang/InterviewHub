@@ -44,6 +44,20 @@ export interface Post {
   createdAt: string;
   author: AuthorSummary | null;
   viewerHasUpvoted: boolean;
+  viewerHasBookmarked: boolean;
+}
+
+export interface Collection {
+  id: string;
+  ownerId: string;
+  name: string;
+  description: string;
+  isPrivate: boolean;
+  itemCount: number;
+  createdAt: string;
+  updatedAt: string;
+  /** Only present when the list was fetched with ?postId= (the "Save to…" picker). */
+  containsPost?: boolean;
 }
 
 export interface CommentNode {

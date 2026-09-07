@@ -7,6 +7,7 @@ import { timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { AttachmentGrid } from './AttachmentGrid';
 import { InterviewDetails } from './InterviewDetails';
+import { SaveButton } from './SaveButton';
 import type { Post } from '../types';
 
 export { timeAgo }; // re-export: several pages import it from here
@@ -115,6 +116,7 @@ export function PostCard({ post, onChanged, expanded = false }: { post: Post; on
           <Link to={`/posts/${post.id}`} className="action" title="Comments">
             <span>{post.commentCount} {post.commentCount === 1 ? 'comment' : 'comments'}</span>
           </Link>
+          <SaveButton post={post} onChanged={onChanged} />
           <button className="action" onClick={copyLink} title="Copy link" aria-live="polite">
             {copied ? '✓ Copied' : 'Copy link'}
           </button>

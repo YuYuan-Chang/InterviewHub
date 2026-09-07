@@ -494,6 +494,134 @@ async function main() {
   const bobNotifs2 = await api('/api/notifications', { token: bob.accessToken });
   check('mark-read decrements unread count', bobNotifs2.data.unreadCount === bobNotifs.data.unreadCount - 1);
 
+  console.log('— bookmarks & collections');
+  const save = await api(`/api/posts/${post.data.id}/bookmark`, { method: 'PUT', token: alice.accessToken });
+  const saveAgain = await api(`/api/posts/${post.data.id}/bookmark`, { method: 'PUT', token: alice.accessToken });
+  check(
+    'saving a post is idempotent (201 then 200)',
+    save.status === 201 && saveAgain.status === 200 && saveAgain.data.viewerHasBookmarked === true,
+    JSON.stringify([save.status, saveAgain.status]),
+  );
+
+  const savedFeed = await api('/api/bookmarks', { token: alice.accessToken });
+  check(
+    'saved feed returns the post, enriched',
+    savedFeed.status === 200 && savedFeed.data.items.some((p) => p.id === post.data.id && p.author),
+    JSON.stringify(savedFeed.data.items?.map((p) => p.title)),
+  );
+  const bobSaved = await api('/api/bookmarks', { token: bob.accessToken });
+  check("saved feeds are per-user", !bobSaved.data.items.some((p) => p.id === post.data.id));
+  const anonSaved = await api('/api/bookmarks');
+  check('anonymous saved feed rejected with 401', anonSaved.status === 401, `got ${anonSaved.status}`);
+
+  const missingSave = await api(`/api/posts/${crypto.randomUUID()}/bookmark`, { method: 'PUT', token: alice.accessToken });
+  check('saving a missing post 404s', missingSave.status === 404, `got ${missingSave.status}`);
+
+  const collection = await api('/api/collections', {
+    method: 'POST',
+    token: alice.accessToken,
+    body: { name: '  System   design  ', description: 'Reading list.' },
+  });
+  check(
+    'collection created, name normalized, private by default',
+    collection.status === 201 && collection.data.name === 'System design' && collection.data.isPrivate === true,
+    JSON.stringify(collection.data),
+  );
+  const dupCollection = await api('/api/collections', {
+    method: 'POST',
+    token: alice.accessToken,
+    body: { name: 'System design' },
+  });
+  check('duplicate collection name rejected with 409', dupCollection.status === 409, `got ${dupCollection.status}`);
+
+  const filed = await api(`/api/collections/${collection.data.id}/posts`, {
+    method: 'POST',
+    token: alice.accessToken,
+    body: { postId: post2.data.id },
+  });
+  const filedAgain = await api(`/api/collections/${collection.data.id}/posts`, {
+    method: 'POST',
+    token: alice.accessToken,
+    body: { postId: post2.data.id },
+  });
+  check(
+    'filing a post is idempotent and moves the counter once',
+    filed.status === 201 && filedAgain.status === 200 && filedAgain.data.itemCount === 1,
+    JSON.stringify([filed.status, filedAgain.status, filedAgain.data.itemCount]),
+  );
+
+  const savedAfterFiling = await api('/api/bookmarks', { token: alice.accessToken });
+  check(
+    'filing a post also saves it',
+    savedAfterFiling.data.items.some((p) => p.id === post2.data.id),
+    JSON.stringify(savedAfterFiling.data.items?.map((p) => p.title)),
+  );
+
+  const picker = await api(`/api/collections?postId=${post2.data.id}`, { token: alice.accessToken });
+  check(
+    'picker flags which collections hold the post',
+    picker.data.items.find((c) => c.id === collection.data.id)?.containsPost === true,
+    JSON.stringify(picker.data.items),
+  );
+
+  const collectionPosts = await api(`/api/collections/${collection.data.id}/posts`, { token: alice.accessToken });
+  check(
+    'collection lists its posts',
+    collectionPosts.status === 200 && collectionPosts.data.items.some((p) => p.id === post2.data.id),
+    JSON.stringify(collectionPosts.data.items?.map((p) => p.title)),
+  );
+
+  const foreignRead = await api(`/api/collections/${collection.data.id}`, { token: bob.accessToken });
+  check('private collection 404s for everyone else', foreignRead.status === 404, `got ${foreignRead.status}`);
+  const foreignWrite = await api(`/api/collections/${collection.data.id}/posts`, {
+    method: 'POST',
+    token: bob.accessToken,
+    body: { postId: post.data.id },
+  });
+  check('filing into someone else\'s collection rejected 403', foreignWrite.status === 403, `got ${foreignWrite.status}`);
+
+  const madePublic = await api(`/api/collections/${collection.data.id}`, {
+    method: 'PATCH',
+    token: alice.accessToken,
+    body: { isPrivate: false },
+  });
+  check('collection can be made public', madePublic.data.isPrivate === false, JSON.stringify(madePublic.data));
+  const publicRead = await api(`/api/collections?userId=${alice.user.id}`, { token: bob.accessToken });
+  check(
+    'public collections are listed on the owner profile',
+    publicRead.data.items.some((c) => c.id === collection.data.id),
+    JSON.stringify(publicRead.data.items?.map((c) => c.name)),
+  );
+
+  const unfiled = await api(`/api/collections/${collection.data.id}/posts/${post2.data.id}`, {
+    method: 'DELETE',
+    token: alice.accessToken,
+  });
+  check('removing from a collection decrements the counter', unfiled.data.itemCount === 0, JSON.stringify(unfiled.data));
+  const stillSaved = await api('/api/bookmarks', { token: alice.accessToken });
+  check(
+    '…and leaves the post saved',
+    stillSaved.data.items.some((p) => p.id === post2.data.id),
+  );
+
+  // un-saving must also clear the post out of every collection it was filed in
+  await api(`/api/collections/${collection.data.id}/posts`, {
+    method: 'POST',
+    token: alice.accessToken,
+    body: { postId: post2.data.id },
+  });
+  await api(`/api/posts/${post2.data.id}/bookmark`, { method: 'DELETE', token: alice.accessToken });
+  const afterUnsave = await api(`/api/collections/${collection.data.id}`, { token: alice.accessToken });
+  const collectionAfterUnsave = await api(`/api/collections/${collection.data.id}/posts`, { token: alice.accessToken });
+  check(
+    'un-saving clears the post from collections and fixes the counter',
+    afterUnsave.data.itemCount === 0 && !collectionAfterUnsave.data.items.some((p) => p.id === post2.data.id),
+    JSON.stringify([afterUnsave.data.itemCount, collectionAfterUnsave.data.items.length]),
+  );
+
+  const postWithFlag = await api(`/api/posts/${post.data.id}`, { token: alice.accessToken });
+  check('posts carry viewerHasBookmarked for the viewer', postWithFlag.data.viewerHasBookmarked === true, JSON.stringify(postWithFlag.data.viewerHasBookmarked));
+
   console.log('— download');
   const dl = await fetch(`${BASE}/api/files/${upload.data.id}/download`, {
     headers: { authorization: `Bearer ${alice.accessToken}` },

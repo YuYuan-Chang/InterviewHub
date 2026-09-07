@@ -11,6 +11,7 @@ import { logger } from './logger';
 import { prisma } from './db';
 import { router } from './routes';
 import { resumeRouter } from './resume-routes';
+import { collectionsRouter } from './collections/routes';
 import { internalRouter } from './internal';
 
 export function buildApp(): express.Express {
@@ -24,6 +25,7 @@ export function buildApp(): express.Express {
   });
   app.use(router);
   app.use(resumeRouter);
+  app.use(collectionsRouter);
   app.use(internalRouter);
   app.use(notFoundHandler);
   app.use(errorHandler(logger));

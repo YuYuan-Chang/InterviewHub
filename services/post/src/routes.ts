@@ -18,6 +18,7 @@ import { config } from './config';
 import { enrichPosts } from './enrich';
 import { feedQuerySchema, parseTagList, popularTags, queryFeed } from './feed';
 import { createPostSchema } from './schemas';
+import { deletePostAndFixCounters } from './collections/service';
 
 const userService = s2sClient(config.userServiceUrl, config.internalToken);
 const fileService = s2sClient(config.fileServiceUrl, config.internalToken);
@@ -122,7 +123,8 @@ router.delete('/api/posts/:id', requireAuth(config.jwtPublicKey), async (req, re
   const post = await prisma.post.findUnique({ where: { id: param(req, 'id') } });
   if (!post) throw new HttpError(404, 'Post not found');
   if (post.authorId !== user.id) throw new HttpError(403, 'Only the author can delete a post');
-  await prisma.post.delete({ where: { id: post.id } });
+  // deletes cascade to bookmarks/collection items, so collection counters are fixed in the same transaction
+  await deletePostAndFixCounters(post.id);
   res.status(204).end();
 });
 

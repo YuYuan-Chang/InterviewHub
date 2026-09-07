@@ -75,6 +75,7 @@ Run that once after cloning, and re-run `npm run generate` after any `schema.pri
 - **Comments & Q&A** — threaded replies; post authors are notified of comments, users of new followers
 - **Resume reviews** — choose Resume review when posting, paste plain text or Markdown, and optionally attach a PDF. Peers propose edits with a diff preview or import a `.patch`/`.diff`; the owner accepts or rejects proposals. Download the current text and each unified patch. Version checks prevent stale proposals overwriting accepted changes. Attachments stay as originally uploaded.
 - **Reactions** — upvotes on both posts and comments
+- **Bookmarks & collections** — save any post for later, and optionally file it into named collections. Collections are private by default and can be made public, in which case they show on your profile. Saving from the feed is one click; the ▾ picker files a post into collections without leaving the page.
 - **Search** — one search bar covering posts (title/description/tags, via `?q=` on the explore feed) and people (username/name/school, via `/api/users/search`)
 - **Filters** — multi-tag filtering (`?tags=a,b`, AND semantics) with a chip bar fed by `/api/posts/tags/popular`
 - **Structured interview experiences** — choose “Interview experience” when creating a post to share company, role, stage, questions asked, difficulty, and outcome. Browse experiences using company/role/stage/difficulty/outcome filters; search also matches company, role, and question text. Attachments, comments, and upvotes work as usual.
@@ -132,7 +133,7 @@ The gateway is the only thing the browser talks to. It routes by path prefix —
 |---|---|---|---|
 | **auth** | 4001 | credentials, JWT issuance, refresh tokens | user (create profile on register) |
 | **user** | 4002 | profiles **+ follow graph** | — (publishes new-follower events to Kafka) |
-| **post** | 4003 | posts, tags, post upvotes, both feeds | user (following ids, author profiles), file (verify attachment) |
+| **post** | 4003 | posts, tags, post upvotes, bookmarks & collections, both feeds | user (following ids, author profiles), file (verify attachment) |
 | **file** | 4004 | uploads/downloads, 10MB + MIME enforcement, MinIO | — |
 | **comment** | 4005 | threads, comment upvotes | post (exists/author, comment counter), user (author profiles) |
 | **notification** | 4006 | in-app notifications | user (actor profiles) — consumes Kafka |
@@ -169,6 +170,7 @@ Every one of these is a trade-off, not a law. The alternative and the tipping po
 - **JWT verification is local.** auth-service holds the RS256 private key and is the only thing that can *mint* identity; every other service verifies with the public key from config. Nothing is on auth-service's critical path, so it can be down and reads still work. Cost: revocation isn't instant — a token is valid until it expires (1h default).
 - **One Postgres instance, one database per service.** Real isolation without running six Postgres pods on a laptop. In production these become six separate instances; nothing in the code changes, only `DATABASE_URL`.
 - **Reactions are not a service.** An upvote is a row plus a denormalized counter on its target, kept in sync inside a `$transaction`. So post upvotes live in post-service and comment upvotes in comment-service. A reactions service would turn one transactional write into a distributed one, buying nothing.
+- **Bookmarks live with posts, not users**, for the same reason. A saved-posts page is a feed, so post-service can serve it from its own tables and reuse `enrichPosts()`; putting it in user-service would make the primary read a cross-service fan-out and add a hop to every feed page that wants `viewerHasBookmarked`. Saving and filing are two tables — `bookmarks` is "saved", `collection_items` is "filed here" — kept consistent in one direction: filing a post also saves it, and un-saving removes it from every collection, so the saved state has a single source of truth.
 - **Notifications go through Kafka.** Comment and follow actions publish events; notification-service consumes them. Producers are fail-open and consumption is at-least-once — see [Messaging](#messaging-kafka) for the full guarantees. This replaced an earlier fire-and-forget HTTP path, which silently lost notifications whenever the consumer was down.
 - **The Following feed is fan-out-on-read**: post-service fetches your followee ids and queries `author_id IN (...)` at request time. Simple and always fresh. At real scale you'd flip to fan-out-on-write with a precomputed timeline — the seam is `services/post/src/feed.ts`.
 - **Registration is a saga-lite**: auth creates the credential row → calls user-service to create the profile → rolls the credential row back if that fails (e.g. username taken). No distributed transaction, no orphaned accounts.
