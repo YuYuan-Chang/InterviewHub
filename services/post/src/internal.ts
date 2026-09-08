@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { HttpError, requireInternal, validateBody, param } from '@interviewhub/shared';
 import { prisma } from './db';
 import { config } from './config';
+import { syncCommentCount } from './maintenance';
 
 const deltaSchema = z.object({ delta: z.union([z.literal(1), z.literal(-1)]) });
 
@@ -21,13 +22,14 @@ internalRouter.get('/internal/posts/:id', async (req, res) => {
 
 // comment-service keeps the denormalized comment counter in sync
 internalRouter.post('/internal/posts/:id/comment-count', validateBody(deltaSchema), async (req, res) => {
-  await prisma.post
-    .update({
-      where: { id: param(req, 'id') },
-      data: { commentCount: { increment: req.body.delta } },
-    })
-    .catch(() => {
-      /* post deleted meanwhile — nothing to sync */
-    });
+  await syncCommentCount(param(req, 'id'));
   res.status(204).end();
+});
+
+internalRouter.get('/internal/file-references/:id', async (req, res) => {
+  const id = z.string().uuid().parse(param(req, 'id'));
+  const post = await prisma.post.findFirst({ where: { OR: [
+    { fileId: id }, { attachments: { array_contains: [{ fileId: id }] } },
+  ] }, select: { id: true } });
+  res.json({ referenced: !!post });
 });

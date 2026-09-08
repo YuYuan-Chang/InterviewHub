@@ -34,3 +34,23 @@ model CommentReaction {
   @@id([commentId, userId])
   @@map("comment_reactions")
 }
+
+model Outbox {
+  id          String   @id
+  payload     Json
+  attempts    Int      @default(0)
+  availableAt DateTime @default(now()) @map("available_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([availableAt])
+  @@map("outbox")
+}
+
+model RateLimit {
+  key       String   @id
+  hits      Int
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("rate_limits")
+}

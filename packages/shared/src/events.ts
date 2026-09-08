@@ -7,6 +7,7 @@ export const NOTIFICATIONS_TOPIC = 'interviewhub.notifications';
 export const NOTIFICATIONS_DLQ_TOPIC = 'interviewhub.notifications.dlq';
 
 export const notificationEventSchema = z.object({
+  eventId: z.string().min(1).max(200).optional(),
   type: z.enum(['new_follower', 'new_comment', 'new_reply']),
   recipientId: z.string().uuid(),
   actorId: z.string().uuid(),
@@ -47,8 +48,8 @@ async function ensureTopics(kafka: Kafka): Promise<void> {
 }
 
 export interface NotificationProducer {
-  /** Never throws — a dead broker degrades to the old fire-and-forget behavior. */
-  publish(event: Omit<NotificationEvent, 'requestId'>): Promise<void>;
+  /** Rejects on failure so the transactional outbox retains the event. */
+  publish(event: NotificationEvent): Promise<void>;
   disconnect(): Promise<void>;
 }
 
@@ -73,17 +74,17 @@ export function createNotificationProducer(opts: {
       try {
         ready ??= connect();
         await ready;
-        const payload: NotificationEvent = { ...event, requestId: getRequestId() };
+        const payload: NotificationEvent = { ...event, requestId: event.requestId ?? getRequestId() };
         await producer.send({
           topic: NOTIFICATIONS_TOPIC,
-          // keyed by recipient: per-recipient ordering, even partition spread
+          // Keyed by recipient for partition affinity; relay retries can reorder events.
           messages: [{ key: event.recipientId, value: JSON.stringify(payload) }],
         });
         logger.debug({ type: event.type, recipientId: event.recipientId }, 'notification event published');
       } catch (err) {
-        // FAIL-OPEN: publishing a notification must never break the user action.
         ready = null; // let the next publish retry the connection
-        logger.warn({ err, type: event.type }, 'notification event publish failed — event dropped');
+        logger.warn({ err, type: event.type }, 'notification publish failed; outbox will retry');
+        throw err;
       }
     },
     async disconnect() {
@@ -100,8 +101,8 @@ export interface NotificationConsumer {
  * At-least-once consumer: `handle` throwing (e.g. DB down) leaves the offset
  * uncommitted so kafkajs redelivers with backoff. Messages that cannot even be
  * parsed go to the DLQ and are skipped, so one poison message can't wedge a
- * partition. Consumers must therefore be idempotent-ish; duplicate
- * notifications are acceptable, lost ones are not.
+ * partition. Consumers deduplicate by eventId; legacy messages use topic/partition/offset.
+ * DLQ failure throws so the source offset is never acknowledged prematurely.
  */
 export async function runNotificationConsumer(opts: {
   brokers: string;
@@ -120,16 +121,15 @@ export async function runNotificationConsumer(opts: {
   await consumer.subscribe({ topic: NOTIFICATIONS_TOPIC, fromBeginning: true });
 
   await consumer.run({
-    eachMessage: async ({ message, partition }) => {
+    eachMessage: async ({ message, partition, topic }) => {
       const raw = message.value?.toString() ?? '';
       let event: NotificationEvent;
       try {
         event = notificationEventSchema.parse(JSON.parse(raw));
+        event.eventId ??= `${topic}:${partition}:${message.offset}`;
       } catch (err) {
         logger.error({ err, partition, raw: raw.slice(0, 200) }, 'poison message — routing to DLQ');
-        await dlq
-          .send({ topic: NOTIFICATIONS_DLQ_TOPIC, messages: [{ value: raw }] })
-          .catch((dlqErr) => logger.error({ err: dlqErr }, 'DLQ publish failed — poison message dropped'));
+        await dlq.send({ topic: NOTIFICATIONS_DLQ_TOPIC, messages: [{ value: raw }] });
         return; // commit past it
       }
       await handle(event); // throws → retry, offset stays uncommitted

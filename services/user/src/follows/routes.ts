@@ -13,7 +13,6 @@ import {
 import { prisma } from '../db';
 import { config } from '../config';
 import * as follows from './service';
-import { notifications } from '../events';
 
 const listQuery = z.object({ cursor: z.string().optional(), limit: z.coerce.number().optional() });
 
@@ -27,14 +26,6 @@ followsRouter.post('/api/users/:userId/follow', requireAuth(config.jwtPublicKey)
   if (!targetProfile) throw new HttpError(404, 'User not found');
 
   const created = await follows.follow(viewer.id, target);
-  if (created) {
-    // durable via Kafka; fail-open if the broker is down (publish never throws)
-    void notifications.publish({
-      type: 'new_follower',
-      recipientId: target,
-      actorId: viewer.id,
-    });
-  }
   res.status(created ? 201 : 200).json(await follows.followCounts(target));
 });
 

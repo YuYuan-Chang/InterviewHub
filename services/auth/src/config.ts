@@ -1,6 +1,11 @@
 import { decodeB64Env, envOr, requiredEnv, param } from '@interviewhub/shared';
 
 export const config = {
+  registerRateLimit: Number(envOr('REGISTER_RATE_LIMIT', '5')),
+  loginIpRateLimit: Number(envOr('LOGIN_IP_RATE_LIMIT', '20')),
+  loginAccountRateLimit: Number(envOr('LOGIN_ACCOUNT_RATE_LIMIT', '10')),
+  apiRateLimit: Number(envOr('API_RATE_LIMIT', '300')),
+  trustProxy: envOr('TRUST_PROXY', ''),
   port: Number(envOr('PORT', '4001')),
   databaseUrl: envOr('DATABASE_URL', 'postgresql://auth_svc:auth_pw@localhost:5432/auth_db'),
   jwtPrivateKey: decodeB64Env('JWT_PRIVATE_KEY_B64'),

@@ -158,10 +158,10 @@ Two walkthroughs that cover most of the interesting machinery.
 **Posting a comment** (`POST /api/comments/post/:postId`)
 
 1. **comment-service** verifies the JWT locally, validates the body with zod, and writes the comment.
-2. In the same `$transaction` it bumps the thread's denormalized counters.
-3. It calls post-service `POST /internal/posts/:id/comment-count` via `fireAndForget` — synchronous counter state, so REST, not an event. If post-service is down, the comment still succeeds and the failure is logged.
-4. It publishes a `new_comment` event to Kafka. **Publishing never throws**: a dead broker cannot break the user's action.
-5. **notification-service** consumes the event and inserts the notification row. If it was down, the event waits in the topic and arrives on recovery.
+2. In the same `$transaction` it records the notification event in its local outbox.
+3. It calls post-service `POST /internal/posts/:id/comment-count` via `fireAndForget` — an absolute count refresh. If post-service is down, the comment still succeeds and periodic reconciliation repairs the count.
+4. The comment and notification outbox event commit together. A background relay retries Kafka publication until confirmed; a broker outage cannot lose the event.
+5. **notification-service** consumes the event and inserts the notification row once per event ID. If it was down, the event waits in the topic and arrives on recovery.
 
 ## Why it's built this way
 
@@ -171,9 +171,9 @@ Every one of these is a trade-off, not a law. The alternative and the tipping po
 - **One Postgres instance, one database per service.** Real isolation without running six Postgres pods on a laptop. In production these become six separate instances; nothing in the code changes, only `DATABASE_URL`.
 - **Reactions are not a service.** An upvote is a row plus a denormalized counter on its target, kept in sync inside a `$transaction`. So post upvotes live in post-service and comment upvotes in comment-service. A reactions service would turn one transactional write into a distributed one, buying nothing.
 - **Bookmarks live with posts, not users**, for the same reason. A saved-posts page is a feed, so post-service can serve it from its own tables and reuse `enrichPosts()`; putting it in user-service would make the primary read a cross-service fan-out and add a hop to every feed page that wants `viewerHasBookmarked`. Saving and filing are two tables — `bookmarks` is "saved", `collection_items` is "filed here" — kept consistent in one direction: filing a post also saves it, and un-saving removes it from every collection, so the saved state has a single source of truth.
-- **Notifications go through Kafka.** Comment and follow actions publish events; notification-service consumes them. Producers are fail-open and consumption is at-least-once — see [Messaging](#messaging-kafka) for the full guarantees. This replaced an earlier fire-and-forget HTTP path, which silently lost notifications whenever the consumer was down.
+- **Notifications go through Kafka.** Comment and follow actions publish events; notification-service consumes them. Producers use transactional outboxes and consumption is idempotent and at-least-once — see [Messaging](#messaging-kafka) for the full guarantees. This replaced an earlier fire-and-forget HTTP path, which silently lost notifications whenever the consumer was down.
 - **The Following feed is fan-out-on-read**: post-service fetches your followee ids and queries `author_id IN (...)` at request time. Simple and always fresh. At real scale you'd flip to fan-out-on-write with a precomputed timeline — the seam is `services/post/src/feed.ts`.
-- **Registration is a saga-lite**: auth creates the credential row → calls user-service to create the profile → rolls the credential row back if that fails (e.g. username taken). No distributed transaction, no orphaned accounts.
+- **Registration is a saga-lite**: auth creates the credential row → calls user-service to create the profile → rolls the credential row back if that fails (e.g. username taken). Compensation covers explicit failures; ambiguous timeouts still need durable saga recovery.
 - **`packages/shared` is the contract.** Auth, validation, errors, S2S, pagination, request context, and events live in exactly one place, so six services behave identically without a framework.
 
 ### Does the follow graph deserve its own service?
@@ -332,7 +332,7 @@ kubectl get pods -n interviewhub    # 2 replicas each; Ready = probes passing
 kubectl get hpa  -n interviewhub    # CPU-based autoscaling, 2→5 replicas
 ```
 
-Every service ships liveness (`/livez`) and readiness (`/healthz`, which checks its DB) probes, resource requests/limits, and an `autoscaling/v2` HPA at 70% CPU. Uploads work through the Ingress via the `proxy-body-size: 12m` annotation. Postgres, MinIO, and Kafka run as single-replica StatefulSets for the dev cluster — swap for managed services in production.
+Every service ships liveness (`/livez`) and readiness (`/healthz`, which checks its DB and, for file-service, MinIO) probes, resource requests/limits, and an `autoscaling/v2` HPA at 70% CPU. Uploads work through the Ingress via the `proxy-body-size: 12m` annotation. Postgres, MinIO, and Kafka run as single-replica StatefulSets for the dev cluster — swap for managed services in production.
 
 ## Observability
 
@@ -350,13 +350,12 @@ On Kubernetes the pods carry `prometheus.io/*` scrape annotations (bring your ow
 Notifications flow through **Kafka**: comment-service and user-service publish `new_comment` / `new_reply` / `new_follower` events to the `interviewhub.notifications` topic (single-node KRaft broker, no ZooKeeper); notification-service consumes them (`groupId: notification-service`) and writes rows.
 
 - **Durable** — if notification-service is down, events wait in the topic and are delivered on recovery. Under the old HTTP path they were silently lost.
-- **At-least-once** — a failing insert (say, DB down) leaves the offset uncommitted and the message is redelivered. Duplicates are possible, losses are not, so inserts must tolerate redelivery.
-- **Fail-open producers** — `publish()` never throws. A dead broker can't break a user action, which is why Kafka here is strictly an upgrade over the HTTP path.
+- **At-least-once with idempotent delivery** — failed inserts leave offsets uncommitted. A unique event ID prevents duplicate inbox rows and preserves read state on replay.
+- **Transactional outbox** — domain writes and events commit together; a relay retains failed publishes and retries with backoff.
 - **DLQ** — unparseable messages go to `interviewhub.notifications.dlq` instead of wedging a partition.
-- **Keyed by recipient** for per-recipient ordering. Events carry the `x-request-id`, and OTel's kafkajs instrumentation stitches producer → consumer into one trace.
-- **The comment-count bump stays REST** — that's synchronous counter state, not an event.
+- **Keyed by recipient** for partitioning. Relay retries and concurrent workers may reorder events. Events retain the originating request ID.
+- **Comment counts use REST snapshots**, backed by periodic reconciliation if a callback is lost.
 - `kafkajs` is lazily `require`d inside `shared/src/events.ts`, for the same reason `index.ts` dynamic-imports the app: a static import loads it before `initTracing()` and OTel can't patch it.
-- **Next rigor step** (not implemented): the **transactional outbox** pattern, which would make the DB write and the publish atomic.
 
 ## Operations
 
@@ -364,14 +363,18 @@ Notifications flow through **Kafka**: comment-service and user-service publish `
 - **Migrations** — schema changes are versioned `prisma migrate` files (`services/*/prisma/migrations/`). Containers run `prisma migrate deploy` at boot (Compose) or in an initContainer (k8s). Databases created by the old `db push` flow are adopted once via `./scripts/baseline-migrations.sh`.
 - **Secrets** — `generate-keys.sh` writes `infra/keys/` and `infra/.env`, both gitignored. For k8s, `infra/k8s/create-secrets.sh` builds the Secret from those keys; `02-secrets.example.yaml` is a template, never a real secret.
 
+## Reliability hardening
+
+Database-backed rate limits protect all public APIs, with stricter login and registration allowances. Internal calls have deadlines, safe-read retries and circuit breakers. Transactional outboxes and unique notification event IDs close the Kafka loss/duplication windows. Periodic jobs reconcile counters, remove deleted-post comments and collect unused files after quarantine. File readiness includes MinIO.
+
+See [Production reliability](docs/RELIABILITY.md) for guarantees, configuration, rollout order, fault-injection tests and operational trade-offs.
+
 ## Known gaps
 
-Stated plainly, because a reference project should be honest about what it doesn't do:
-
-- **No timeouts or retries on service-to-service calls.** A *hung* (rather than dead) dependency stalls the caller until the socket timeout. First thing to add for production.
-- **No rate limiting anywhere**, including `POST /api/auth/login` — there's no brute-force protection yet.
-- **No account deletion.** Deleting an auth user cascades its refresh tokens, but nothing removes the profile, posts, or comments.
-- **No transactional outbox**, so a crash between DB commit and Kafka publish loses the event.
+- No account deletion or durable registration saga recovery after ambiguous downstream failures.
+- No end-to-end propagated request deadline; S2S budgets apply per call.
+- Kafka replication, retention and backups need production configuration; Compose remains a single-broker demo.
+- File collection uses a conservative quarantine interval rather than distributed reference transactions.
 
 ## Further reading
 

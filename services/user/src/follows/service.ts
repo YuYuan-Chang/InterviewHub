@@ -1,3 +1,4 @@
+import { notificationRecord } from '@interviewhub/shared';
 import { prisma } from '../db';
 
 // All follow-graph data access lives here — the seam for extracting a
@@ -20,11 +21,13 @@ export async function isFollowing(followerId: string, followeeId: string): Promi
 
 /** Returns true if a new follow edge was created (false = already following). */
 export async function follow(followerId: string, followeeId: string): Promise<boolean> {
-  const result = await prisma.follow.createMany({
-    data: [{ followerId, followeeId }],
-    skipDuplicates: true,
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.follow.createMany({ data: [{ followerId, followeeId }], skipDuplicates: true });
+    if (result.count > 0) await tx.outbox.create({ data: notificationRecord({
+      type: 'new_follower', recipientId: followeeId, actorId: followerId,
+    }) });
+    return result.count > 0;
   });
-  return result.count > 0;
 }
 
 export async function unfollow(followerId: string, followeeId: string): Promise<void> {

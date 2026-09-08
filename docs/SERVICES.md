@@ -1,6 +1,6 @@
 # InterviewHub — Service Reference
 
-Internal service documentation, generated from the code as-built (July 2026). Every route, field, and type below is taken from the source — file paths are cited so you can verify. Where something does **not** exist (rate limiting, retries, a "follow service"), that is stated rather than papered over.
+Internal service documentation, generated from the code as-built (July 2026). Every route, field, and type below is taken from the source — file paths are cited so you can verify. The reliability contracts below were updated in September 2026; see [Production reliability](RELIABILITY.md) for implementation guarantees and operations.
 
 Two corrections to the requested outline, from the actual repo:
 
@@ -8,6 +8,12 @@ Two corrections to the requested outline, from the actual repo:
 - **The stack is Node/TypeScript, not Python.** ORM models are **Prisma** schemas (`services/*/prisma/schema.prisma`), and request validation is **zod** (inline in each `routes.ts`) — these fill the roles SQLAlchemy and Pydantic would in a Python codebase.
 
 ---
+
+## Reliability additions
+
+See [Production reliability](RELIABILITY.md) for defaults, worker scheduling and rollout. Schema additions: all services own `rate_limits(key,hits,expires_at)`; user/comment own `outbox(id,payload,attempts,available_at,created_at)`; notifications have unique nullable `event_id` for rolling migration compatibility; files have nullable `gc_marked_at`.
+
+New protected endpoints: post/user `GET /internal/file-references/:id` → `{ referenced: boolean }`; comment `GET /internal/comments/post/:id/count` → `{ count: number }`. File ownership verification rejects quarantined files. All readiness checks have a response deadline, and file readiness additionally checks MinIO.
 
 ## 0 · Conventions shared by every service
 
@@ -23,15 +29,15 @@ All six services are Express 5 apps built from one skeleton and one shared packa
 
 **Error shape** (`shared/src/errors.ts`) — every error responds `{ "error": string, "details"?: unknown }`. Validation failures are `400 { error: "Validation failed", details: ["field: message", …] }`. Unhandled exceptions log server-side and return `500 { error: "Internal server error" }`. Multer's file-size limit is mapped to `413 { error: "File exceeds the 10MB limit" }`. Unknown paths → `404 { error: "Not found" }`.
 
-**Health** (`shared/src/health.ts`) — every service exposes `GET /livez` (process up; k8s liveness) and `GET /healthz` (runs `SELECT 1` against its DB; k8s readiness → `503` when the DB is unreachable).
+**Health** (`shared/src/health.ts`) — every service exposes `GET /livez` (process up; k8s liveness) and `GET /healthz` (runs `SELECT 1` against its DB; k8s readiness → `503` when the DB is unreachable; file-service also checks MinIO).
 
 **Pagination** (`shared/src/pagination.ts`) — keyset cursors, never OFFSET. A cursor is base64url-encoded JSON of the last-seen sort key; malformed cursors → `400 Malformed cursor`. `clampLimit(raw, fallback=20, max=50)` bounds every `limit` param.
 
-**S2S client** (`shared/src/s2s.ts`) — `s2sClient(baseUrl, internalToken)` wraps `fetch`, attaching the internal token. Downstream `404`→`404`, `409`→`409` (message preserved), anything else non-2xx→`502 Upstream service error`, network failure→`502 Upstream service unreachable`. `fireAndForget(promise, label)` detaches a side-effect call: rejection is logged, never propagated.
+**S2S client** (`shared/src/s2s.ts`) forwards internal authentication and request IDs. It preserves 404/409 statuses and maps dependency failures to 502. `fireAndForget` logs optional side-effect failures.
 
-> ⚠️ **No timeouts, no retries, anywhere.** `s2sClient` passes no `AbortSignal`, so a *hung* (rather than dead) dependency stalls the calling request until the runtime's socket timeout. No retry logic exists. Acceptable at this scale; flagged as the first thing to add for production hardening.
+**S2S isolation:** 3-second total deadlines, up to two retries for safe GET calls, and per-client circuit breakers. Mutations never automatically retry. See [Reliability](RELIABILITY.md).
 
-> ⚠️ **No rate limiting, anywhere.** No endpoint — including `POST /api/auth/login` — has request throttling. Brute-force protection does not exist yet.
+**Rate limiting:** all public APIs have shared database buckets; auth adds stricter IP and account limits. Returns 429 with Retry-After; health/internal routes are exempt. See [configuration](RELIABILITY.md#request-protection).
 
 **Config** — 12-factor, env vars only (each service's `src/config.ts`). Notable: JWT keys travel base64-encoded (`JWT_PUBLIC_KEY_B64`, private key only in auth-service); `INTERNAL_TOKEN` is required (no default); service URLs default to `http://localhost:400x` for bare-metal dev and are overridden to service DNS names in Compose/k8s.
 
@@ -137,15 +143,15 @@ Follower/following lists paginate by `createdAt` keyset (cursor payload `{ befor
 
 No FK between `follows` and `profiles` — and no FK to `auth_db.users` is *possible* (different database). Referential integrity across services is by convention: `user_id` is minted by auth and never changes.
 
-**Transactions:** none needed — every write is a single statement (`createMany skipDuplicates` / `deleteMany` are the idempotency mechanism).
+**Transactions:** new follow edges and their notification outbox entries commit atomically; duplicate edges do not enqueue another event.
 
 **⚠️ N+1, the worst in the codebase:** `GET /api/users/search` calls `withCounts()` per result, and `withCounts` issues 2 `COUNT(*)`s + 1 `findUnique` — so a full 20-row search executes up to **1 + 20×3 = 61 queries**. Same pattern (×1) on every profile read, which is fine; the search fan-out is the flag. Fix would be a grouped count query or denormalized counters. `followers`/`following` lists do it right: one edge query + one batched profile `findMany`.
 
 ### 2.6 Inter-service communication
 
-**Calls:** `POST {notification-service}/internal/notifications` with `{ recipientId, type: "new_follower", actorId }` — **only when a new edge was actually created** (re-follows don't re-notify), wrapped in `fireAndForget`.
+**Publishes:** new-follower events through the local transactional outbox and Kafka, only when a new edge is inserted.
 
-**Failure behavior:** notification-service down → follow still succeeds, event logged and lost (no queue/replay). Nothing else is called; profile reads never leave the service.
+**Failure behavior:** notification-service or Kafka outages leave events durable in Kafka or the producer outbox; follow requests succeed once their local transaction commits.
 
 ---
 
@@ -225,7 +231,7 @@ Both listings are keyset-paged on `created_at DESC` using the composite primary 
 | Endpoint | Caller | Contract |
 |---|---|---|
 | `GET /internal/posts/:id` | comment-service | `200 { id, authorId, title }` · `404` |
-| `POST /internal/posts/:id/comment-count` | comment-service | body `{ delta: 1 \| -1 }` (zod literal union) → `204`; if the post vanished meanwhile, the update error is swallowed (`.catch`) — still `204` |
+| `POST /internal/posts/:id/comment-count` | comment-service | `{ delta: 1 | -1 }` triggers an absolute snapshot refresh → `204`; missing post no-ops, dependency failures propagate |
 
 ### 3.4 Database — `post_db`
 
@@ -245,8 +251,8 @@ The two composite indexes exactly match the two feed sort orders; the GIN index 
 **⚠️ Flags:**
 - `q` search uses ILIKE `contains` on `title`/`description` — no trigram/FTS index, so it's a sequential scan at scale. Fine now; first search-scale fix is `pg_trgm` or `tsvector`.
 - `popularTags()` is `SELECT unnest(tags), count(*) … GROUP BY` over **the whole table** — un-indexable, O(total posts), and called by the UI on every feed page load. The designated first caching target (measured ~4 ms at current row counts; grows linearly).
-- Deleting a post cascades its reactions but **cannot** cascade its comments (comment_db) or files (file_db/MinIO) — cross-service garbage collection does not exist; orphaned comments and blobs remain.
-- `comment_count` arrives via fire-and-forget callback: if that callback is lost, the count under-reports forever (no reconciliation job).
+- Deleting a post cascades local children. Periodic comment cleanup and reference-aware file quarantine handle remote data through protected APIs.
+- `comment_count` uses an absolute snapshot callback and periodic reconciliation; temporary drift heals during a full scan.
 
 ### 3.5 Inter-service communication
 
@@ -256,13 +262,13 @@ The two composite indexes exactly match the two feed sort orders; the GIN index 
 | user `POST /internal/profiles/batch` | every enriched response | sync, **degrading** | `.catch` → empty profile map → posts render with `author: null`; feed stays up |
 | file `GET /internal/files/:id` | post creation, per attachment (parallel `Promise.all`) | sync, blocking | creation fails `502` (or `404` per missing file) — correct, since ownership can't be verified |
 
-**Listens for:** the `comment-count` callback (§3.3). No queues anywhere in the system.
+**Listens for:** the `comment-count` refresh callback (§3.3). See [Reliability](RELIABILITY.md) for repair jobs and Kafka delivery.
 
 ---
 
 ## 4 · file-service
 
-`services/file` · port **4004** · database **file_db** + MinIO bucket **interviewhub-files** · the only blob-touching service, and the only leaf (zero outbound calls)
+`services/file` · port **4004** · database **file_db** + MinIO bucket **interviewhub-files** · the only blob-touching service
 
 ### 4.1 Purpose & responsibility
 
@@ -298,11 +304,11 @@ Filenames are sanitized (`[^\w.\- ]` → `_`, max 150 chars). Storage key: `{own
 
 MinIO holds the bytes; Postgres holds the pointer + metadata. The bucket is created at startup if missing (`ensureBucket()` in `src/storage.ts`).
 
-**⚠️ No atomicity between the two stores:** upload writes MinIO first, then the DB row. A crash between them leaves an orphaned blob (harmless, invisible, never GC'd). There is **no delete endpoint at all** — files are immortal once uploaded.
+**Storage atomicity:** upload writes MinIO before metadata. A periodic worker removes aged blobs without metadata and quarantines unreferenced metadata before deleting bytes. There is no public file-delete endpoint.
 
 ### 4.4 Inter-service communication
 
-Calls nothing. Depends only on Postgres and MinIO — if MinIO is down, uploads/downloads `500` (the S3 SDK error hits the generic handler) while `/healthz` still reports ready (it only checks Postgres). **Flag:** readiness doesn't cover MinIO, so k8s keeps routing to a pod that can't actually serve files.
+Readiness checks Postgres and MinIO with a bounded response deadline. Cleanup calls post/user protected reference APIs, preserving files whenever either dependency is unavailable.
 
 ---
 
@@ -336,18 +342,18 @@ Calls nothing. Depends only on Postgres and MinIO — if MinIO is down, uploads/
 
 No FK to `posts` — different database; `post_id` is an opaque reference. **Minor flag:** `comment_reactions` lacks the `INDEX(user_id)` that `post_reactions` has — the viewer-upvote lookup filters `user_id + comment_id IN (…)`, which the composite PK serves adequately, but the schemas are needlessly asymmetric.
 
-**Transactions:** upvote add/remove use the same `$transaction` insert-then-conditionally-increment pattern as post-service. Comment creation itself is a single insert; its side effects are deliberately outside any transaction (below).
+**Transactions:** reactions and their counters commit together. Comment creation and its notification outbox event also share a transaction; count refresh remains a best-effort callback backed by reconciliation.
 
 ### 5.4 Inter-service communication
 
 | Calls | When | Mode | If it's down |
 |---|---|---|---|
 | post `GET /internal/posts/:id` | before every comment insert | sync, blocking | commenting fails `502` — by design; can't validate or notify without the post |
-| post `POST /internal/posts/:id/comment-count` `{delta:1}` | after insert | `fireAndForget` | count silently drifts low; comment itself unaffected |
-| notification `POST /internal/notifications` | after insert — `new_reply` to parent author if replying, else `new_comment` to post author | `fireAndForget` | notification lost; comment unaffected |
+| post `POST /internal/posts/:id/comment-count` `{delta:1}` | after insert | best-effort absolute snapshot refresh | periodic reconciliation repairs missed callbacks |
+| Kafka notification event | after local comment + outbox commit | background relay | durable outbox retries until publish succeeds |
 | user `POST /internal/profiles/batch` | thread reads | sync, **degrading** (`.catch` → authors null) | thread renders with anonymous authors |
 
-Note the asymmetry: comment **deletion** (which only happens via the DB cascade — there is no delete endpoint) never decrements `comment_count`. Another accepted drift source.
+Comment maintenance removes threads only after post-service confirms a missing post. Periodic snapshot repair restores post counts after lost callbacks.
 
 ### 5.5 Not implemented
 
@@ -363,15 +369,14 @@ No edit or delete endpoints for comments; no per-thread pagination; no mention/@
 
 **Owns:** the in-app inbox — who should see what happened, whether they've read it, and the unread badge count.
 
-**Why separate:** it's written by three different services on their side-effect paths; centralizing means emitters share one contract, and (critically) the whole service can be down without any user-facing write failing — every producer calls it fire-and-forget.
+**Why separate:** Kafka isolates inbox delivery from follow/comment actions, and transactional outboxes retain events while dependencies are unavailable.
 
-**Does not handle:** email/push (in-app only, polled by the frontend every 30 s); event durability (a missed HTTP call is lost — there is **no queue**; that is the documented production upgrade seam).
+**Does not handle:** email/push (in-app only, polled every 30 seconds). Kafka and producer outboxes provide durable event delivery.
 
 ### 6.2 API
 
 | Endpoint | Auth | Request | Success | Errors |
 |---|---|---|---|---|
-| `POST /internal/notifications` | internal token | `recipientId` (uuid) · `type` (`new_follower` \| `new_comment` \| `new_reply`) · `actorId` (uuid) · `postId?` · `commentId?` | `201` row — or `204` **without insert** when `recipientId === actorId` (you never hear about your own actions) | `400` validation |
 | `GET /api/notifications` | JWT | query: `cursor?` · `limit?` (clamped **20/100** — the one endpoint with max 100) · `unreadOnly?` | `200 { items: [{ …notification, actor }], unreadCount, nextCursor }` — `actor` is `{ userId, username, displayName, school } \| null`; `unreadCount` is the total regardless of page | `400` bad cursor |
 | `POST /api/notifications/:id/read` | JWT | — | `204` — scoped `updateMany({ id, recipientId: me })`, so you cannot read someone else's notification (silently no-ops) | — |
 | `POST /api/notifications/read-all` | JWT | — | `204` | — |
@@ -392,7 +397,7 @@ Both hot queries are pure index scans. No FKs anywhere (all four ids reference o
 
 **Calls:** user `POST /internal/profiles/batch` on inbox reads — sync, degrading (`.catch` → `actor: null`).
 
-**Listens for:** the three producers (user-service: `new_follower`; comment-service: `new_comment`, `new_reply`) — all fire-and-forget HTTP. If notification-service is down at emit time, the event is permanently lost; nothing retries.
+**Listens for:** Kafka events from user-service and comment-service, persisted idempotently by unique event ID. Malformed messages go to a DLQ; persistence/DLQ failure leaves the source offset uncommitted.
 
 ---
 
@@ -403,9 +408,9 @@ Both hot queries are pure index scans. No FKs anywhere (all four ids reference o
 | | user | post | file | notification |
 |---|---|---|---|---|
 | **auth** | create profile (rollback on fail) | — | — | — |
-| **user** | — | — | — | new_follower *(f&f)* |
+| **user** | — | — | — | new_follower *(outbox → Kafka)* |
 | **post** | following ids · profile batch *(d)* | — | ownership check | — |
-| **comment** | profile batch *(d)* | post lookup · count delta *(f&f)* | — | new_comment / new_reply *(f&f)* |
+| **comment** | profile batch *(d)* | post lookup · count snapshot *(f&f)* | — | new_comment / new_reply *(outbox → Kafka)* |
 | **notification** | profile batch *(d)* | — | — | — |
 
-**Known gaps, in one place** (all flagged above in context): no rate limiting · no S2S timeouts or retries · no queue behind notifications (lossy) · counter drift possible (`comment_count`) with no reconciliation · no cross-service cascade on delete (orphaned comments/files) · no file deletion or GC · user-search N+1 (≤61 queries) · comment threads capped at 500 with no pagination · `unreadOnly=false` coercion bug · stale 415 message in file-service · file-service readiness ignores MinIO · account deletion doesn't exist.
+**Remaining gaps:** user-search N+1 (≤61 queries) · comment threads capped at 500 with no pagination · `unreadOnly=false` coercion bug · stale 415 message in file-service · account deletion doesn't exist.

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import {
+  rateLimit,
   HttpError,
   fireAndForget,
   requireAuth,
@@ -40,7 +41,7 @@ const refreshSchema = z.object({ refreshToken: z.string().min(1) });
 
 export const router: Router = Router();
 
-router.post('/api/auth/register', validateBody(registerSchema), async (req, res) => {
+router.post('/api/auth/register', rateLimit(prisma, 'register', config.registerRateLimit, 15 * 60_000), validateBody(registerSchema), async (req, res) => {
   const { email, password, username, displayName, school, targetRoles } = req.body;
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -75,7 +76,8 @@ router.post('/api/auth/register', validateBody(registerSchema), async (req, res)
   res.status(201).json(await issueTokenPair(user.id, user.email));
 });
 
-router.post('/api/auth/login', validateBody(loginSchema), async (req, res) => {
+router.post('/api/auth/login', rateLimit(prisma, 'login-ip', config.loginIpRateLimit, 15 * 60_000),
+  rateLimit(prisma, 'login-account', config.loginAccountRateLimit, 15 * 60_000, (req) => typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : req.ip ?? 'unknown'), validateBody(loginSchema), async (req, res) => {
   const { email, password } = req.body;
   const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
