@@ -1,4 +1,6 @@
 import {
+  DeleteObjectCommand,
+  ListObjectsV2Command,
   CreateBucketCommand,
   GetObjectCommand,
   HeadBucketCommand,
@@ -37,4 +39,17 @@ export async function putObject(key: string, body: Buffer, mime: string): Promis
 export async function getObjectStream(key: string): Promise<Readable> {
   const res = await s3.send(new GetObjectCommand({ Bucket: config.s3Bucket, Key: key }));
   return res.Body as Readable;
+}
+
+export async function checkStorage(): Promise<void> {
+  await s3.send(new HeadBucketCommand({ Bucket: config.s3Bucket }), { abortSignal: AbortSignal.timeout(2000) });
+}
+
+export async function deleteObject(key: string): Promise<void> {
+  await s3.send(new DeleteObjectCommand({ Bucket: config.s3Bucket, Key: key }), { abortSignal: AbortSignal.timeout(3000) });
+}
+
+export async function listObjects(token?: string) {
+  return s3.send(new ListObjectsV2Command({ Bucket: config.s3Bucket, MaxKeys: 100, ContinuationToken: token }),
+    { abortSignal: AbortSignal.timeout(3000) });
 }

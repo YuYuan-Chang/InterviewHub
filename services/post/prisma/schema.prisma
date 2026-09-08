@@ -125,3 +125,12 @@ model CollectionItem {
   @@index([postId])
   @@map("collection_items")
 }
+
+model RateLimit {
+  key       String   @id
+  hits      Int
+  expiresAt DateTime @map("expires_at")
+
+  @@index([expiresAt])
+  @@map("rate_limits")
+}

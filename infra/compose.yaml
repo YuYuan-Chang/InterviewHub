@@ -4,6 +4,8 @@ name: interviewhub
 x-service-env: &service-env
   JWT_PUBLIC_KEY_B64: ${JWT_PUBLIC_KEY_B64}
   INTERNAL_TOKEN: ${INTERNAL_TOKEN:-dev-internal-token}
+  TRUST_PROXY: ${TRUST_PROXY:-loopback,linklocal,uniquelocal}
+  COMMENT_SERVICE_URL: http://comment-service:4005
   USER_SERVICE_URL: http://user-service:4002
   POST_SERVICE_URL: http://post-service:4003
   FILE_SERVICE_URL: http://file-service:4004

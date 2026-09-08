@@ -5,13 +5,17 @@ import { initTracing } from '@interviewhub/shared';
 const tracing = initTracing('comment-service');
 
 async function main() {
-  const { installGracefulShutdown } = await import('@interviewhub/shared');
+  const { installGracefulShutdown, startJob, pruneRateLimits } = await import('@interviewhub/shared');
   const { buildApp } = await import('./app');
   const { config } = await import('./config');
   const { prisma } = await import('./db');
   const { logger } = await import('./logger');
-  const { notifications } = await import('./events');
+  const { notifications, startOutbox } = await import('./events');
 
+  const stopOutbox = startOutbox();
+  const stopRatePrune = startJob('rate-limit-prune', () => pruneRateLimits(prisma), logger);
+  const { startMaintenance } = await import('./maintenance');
+  const stopMaintenance = startMaintenance();
   const server = buildApp().listen(config.port, () => {
     logger.info({ port: config.port }, 'comment-service listening');
   });
@@ -19,6 +23,9 @@ async function main() {
     server,
     logger,
     cleanup: async () => {
+      await stopMaintenance();
+      await stopRatePrune();
+      await stopOutbox();
       await notifications.disconnect();
       await prisma.$disconnect();
       await tracing.shutdown();

@@ -42,3 +42,8 @@ internalRouter.post('/internal/profiles/batch', validateBody(batchSchema), async
   });
   res.json({ profiles });
 });
+
+internalRouter.get('/internal/file-references/:id', async (req, res) => {
+  const avatarFileId = z.string().uuid().parse(param(req, 'id'));
+  res.json({ referenced: !!await prisma.profile.findFirst({ where: { avatarFileId }, select: { userId: true } }) });
+});

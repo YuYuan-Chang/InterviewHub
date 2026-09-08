@@ -5,7 +5,7 @@ import { initTracing } from '@interviewhub/shared';
 const tracing = initTracing('file-service');
 
 async function main() {
-  const { installGracefulShutdown } = await import('@interviewhub/shared');
+  const { installGracefulShutdown, startJob, pruneRateLimits } = await import('@interviewhub/shared');
   const { buildApp } = await import('./app');
   const { config } = await import('./config');
   const { prisma } = await import('./db');
@@ -13,6 +13,9 @@ async function main() {
   const { ensureBucket } = await import('./storage');
 
   await ensureBucket();
+  const stopRatePrune = startJob('rate-limit-prune', () => pruneRateLimits(prisma), logger);
+  const { startMaintenance } = await import('./maintenance');
+  const stopMaintenance = startMaintenance();
   const server = buildApp().listen(config.port, () => {
     logger.info({ port: config.port }, 'file-service listening');
   });
@@ -20,6 +23,8 @@ async function main() {
     server,
     logger,
     cleanup: async () => {
+      await stopMaintenance();
+      await stopRatePrune();
       await prisma.$disconnect();
       await tracing.shutdown();
     },

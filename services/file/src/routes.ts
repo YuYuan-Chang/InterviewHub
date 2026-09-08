@@ -81,7 +81,7 @@ router.get('/api/files/:id/content', async (req, res) => {
 // post-service verifies file ownership before attaching a file to a post
 router.get('/internal/files/:id', requireInternal(config.internalToken), async (req, res) => {
   const record = await prisma.file.findUnique({ where: { id: param(req, 'id') } });
-  if (!record) throw new HttpError(404, 'File not found');
+  if (!record || record.gcMarkedAt) throw new HttpError(404, 'File not found');
   res.json({
     id: record.id,
     ownerId: record.ownerId,

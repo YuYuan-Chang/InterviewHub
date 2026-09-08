@@ -1,0 +1,37 @@
+# Disposable fault-injection stack. Requires Docker Compose with !override support.
+# Always combine with compose.yaml under a separate -p ...-reliability project.
+services:
+  postgres:
+    volumes: !override
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    tmpfs: ["/var/lib/postgresql/data:size=512m"]
+    ports: !override ["55433:5432"]
+  minio:
+    volumes: !override []
+    tmpfs: ["/data:size=256m"]
+    ports: !override ["19000:9000", "19001:9001"]
+  auth-service:
+    ports: !override ["14001:4001"]
+  user-service:
+    ports: !override ["14002:4002"]
+  post-service:
+    ports: !override ["14003:4003"]
+    environment:
+      MAINTENANCE_INTERVAL_MS: "1000"
+  file-service:
+    ports: !override ["14004:4004"]
+    environment:
+      MAINTENANCE_INTERVAL_MS: "1000"
+  comment-service:
+    ports: !override ["14005:4005"]
+    environment:
+      MAINTENANCE_INTERVAL_MS: "1000"
+  notification-service:
+    ports: !override ["14006:4006"]
+  frontend:
+    ports: !override ["18080:80"]
+  kafka:
+    volumes: !override []
+    tmpfs: ["/var/lib/kafka/data:size=256m,mode=1777", "/opt/kafka/logs:size=32m,mode=1777", "/tmp:size=32m,mode=1777,exec"]
+    environment:
+      KAFKA_HEAP_OPTS: "-Xmx256M -Xms128M"

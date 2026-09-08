@@ -10,8 +10,11 @@ export async function deliver(event: NotificationEvent): Promise<void> {
   // users never get notified about their own actions
   if (event.recipientId === event.actorId) return;
 
-  await prisma.notification.create({
+  if (!event.eventId) throw new Error('Notification event requires a delivery identity');
+  await prisma.notification.createMany({
+    skipDuplicates: true,
     data: {
+      eventId: event.eventId,
       recipientId: event.recipientId,
       type: event.type,
       actorId: event.actorId,

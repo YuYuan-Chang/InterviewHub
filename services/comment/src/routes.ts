@@ -14,7 +14,7 @@ import { prisma } from './db';
 import { config } from './config';
 import { buildTree } from './tree';
 import { logger } from './logger';
-import { notifications } from './events';
+import { notificationRecord } from '@interviewhub/shared';
 
 const postService = s2sClient(config.postServiceUrl, config.internalToken);
 const userService = s2sClient(config.userServiceUrl, config.internalToken);
@@ -58,27 +58,15 @@ router.post(
       }
     }
 
-    const comment = await prisma.comment.create({
-      data: { postId, authorId: user.id, parentId: parentId ?? null, body },
+    const comment = await prisma.$transaction(async (tx) => {
+      const created = await tx.comment.create({ data: { postId, authorId: user.id, parentId: parentId ?? null, body } });
+      await tx.outbox.create({ data: notificationRecord({
+        type: parent ? 'new_reply' : 'new_comment', recipientId: parent ? parent.authorId : post.authorId,
+        actorId: user.id, postId, commentId: created.id,
+      }) });
+      return created;
     });
-
-    fireAndForget(
-      postService.post(`/internal/posts/${postId}/comment-count`, { delta: 1 }),
-      'bump comment count',
-      logger,
-    );
-    // Replies notify the parent-comment author; top-level comments notify the
-    // post author. Published to Kafka: durable if notification-service is down,
-    // fail-open if the broker is down (publish never throws).
-    const recipientId = parent ? parent.authorId : post.authorId;
-    const type = parent ? ('new_reply' as const) : ('new_comment' as const);
-    void notifications.publish({
-      type,
-      recipientId,
-      actorId: user.id,
-      postId,
-      commentId: comment.id,
-    });
+    fireAndForget(postService.post(`/internal/posts/${postId}/comment-count`, { delta: 1 }), 'sync comment count', logger);
 
     res.status(201).json({ ...comment, viewerHasUpvoted: false, replies: [] });
   },

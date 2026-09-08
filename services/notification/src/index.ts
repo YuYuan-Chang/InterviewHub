@@ -5,13 +5,14 @@ import { initTracing } from '@interviewhub/shared';
 const tracing = initTracing('notification-service');
 
 async function main() {
-  const { installGracefulShutdown, runNotificationConsumer } = await import('@interviewhub/shared');
+  const { installGracefulShutdown, startJob, pruneRateLimits, runNotificationConsumer } = await import('@interviewhub/shared');
   const { buildApp } = await import('./app');
   const { config } = await import('./config');
   const { prisma } = await import('./db');
   const { logger } = await import('./logger');
   const { deliver } = await import('./deliver');
 
+  const stopRatePrune = startJob('rate-limit-prune', () => pruneRateLimits(prisma), logger);
   const server = buildApp().listen(config.port, () => {
     logger.info({ port: config.port }, 'notification-service listening');
   });
@@ -41,6 +42,7 @@ async function main() {
     server,
     logger,
     cleanup: async () => {
+      await stopRatePrune();
       stopped = true;
       await consumer?.disconnect();
       await prisma.$disconnect();

@@ -12,6 +12,8 @@ server {
 
     resolver ${DNS_RESOLVER} valid=10s ipv6=off;
 
+    proxy_set_header X-Forwarded-For $remote_addr;
+
     client_max_body_size 12m; # let the file-service return a clean 413 at >10MB
 
     root /usr/share/nginx/html;
