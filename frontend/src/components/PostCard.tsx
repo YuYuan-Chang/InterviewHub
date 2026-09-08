@@ -6,6 +6,7 @@ import { useAuth } from '../auth';
 import { timeAgo } from '../format';
 import { Avatar } from './Avatar';
 import { AttachmentGrid } from './AttachmentGrid';
+import { SaveControl } from './SaveControl';
 import type { Post } from '../types';
 
 export { timeAgo }; // re-export: several pages import it from here
@@ -36,6 +37,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post
         queryClient.invalidateQueries({ queryKey: ['search-posts'] }),
         queryClient.invalidateQueries({ queryKey: ['profile-posts'] }),
         queryClient.invalidateQueries({ queryKey: ['post', post.id] }),
+        queryClient.invalidateQueries({ queryKey: ['saved'] }),
       ]);
     } catch {
       setError('Your upvote couldn’t be updated. Please try again.');
@@ -115,6 +117,7 @@ export function PostCard({ post, onChanged }: { post: Post; onChanged?: (p: Post
           <button className="action" onClick={copyLink} title="Copy link" aria-live="polite">
             {copied ? '✓ Copied' : 'Copy link'}
           </button>
+          <SaveControl key={me?.userId ?? 'anonymous'} post={post} />
         </div>
         {error && <p className="error" role="alert">{error}</p>}
       </div>

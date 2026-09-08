@@ -12,7 +12,7 @@ export function PostDetailPage() {
   const queryClient = useQueryClient();
 
   const postQuery = useQuery({
-    queryKey: ['post', id],
+    queryKey: ['post', id, me?.userId],
     queryFn: () => api<Post>(`/api/posts/${id}`),
     enabled: !!id,
   });
@@ -36,7 +36,7 @@ export function PostDetailPage() {
     <div>
       <PostCard
         post={postQuery.data}
-        onChanged={(p) => queryClient.setQueryData(['post', id], p)}
+        onChanged={(p) => queryClient.setQueryData(['post', id, me?.userId], p)}
       />
       <section className="card">
         <h3>

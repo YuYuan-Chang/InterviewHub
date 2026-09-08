@@ -61,12 +61,13 @@ function PersonRow({ person }: { person: Profile }) {
 }
 
 export function SearchPage() {
+  const { me } = useAuth();
   const [params, setParams] = useSearchParams();
   const q = params.get('q') ?? '';
   const tab = params.get('tab') === 'people' ? 'people' : 'posts';
 
   const postsQuery = useQuery({
-    queryKey: ['search-posts', q],
+    queryKey: ['search-posts', q, me?.userId],
     queryFn: () => api<Page<Post>>(`/api/posts/feed/explore?q=${encodeURIComponent(q)}&limit=30`),
     enabled: !!q && tab === 'posts',
   });

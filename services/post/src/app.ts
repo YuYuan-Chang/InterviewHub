@@ -11,6 +11,7 @@ import { logger } from './logger';
 import { prisma } from './db';
 import { router } from './routes';
 import { internalRouter } from './internal';
+import { savedRouter } from './saved';
 
 export function buildApp(): express.Express {
   const app = express();
@@ -21,6 +22,7 @@ export function buildApp(): express.Express {
   healthRoutes(app, async () => {
     await prisma.$queryRaw`SELECT 1`;
   });
+  app.use(savedRouter);
   app.use(router);
   app.use(internalRouter);
   app.use(notFoundHandler);

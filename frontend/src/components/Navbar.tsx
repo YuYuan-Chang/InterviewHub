@@ -38,6 +38,7 @@ export function Navbar() {
       <nav className="primary-nav" aria-label="Main navigation">
         <NavLink to="/" end>Explore</NavLink>
         {me && <NavLink to="/following">Following</NavLink>}
+        {me && <NavLink to="/saved">Saved</NavLink>}
       </nav>
       <form className="search-form" onSubmit={submitSearch} role="search">
         <input
@@ -56,6 +57,7 @@ export function Navbar() {
       <div className="navbar-actions">
         {me ? (
           <>
+            <NavLink to="/saved" className="mobile-saved-link">Saved</NavLink>
             <Link to="/posts/new" className="btn btn-primary">
               <span aria-hidden="true">＋ </span>Share
             </Link>

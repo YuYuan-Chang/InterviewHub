@@ -24,7 +24,7 @@ export function ProfilePage() {
   const profile = profileQuery.data;
 
   const postsQuery = useQuery({
-    queryKey: ['profile-posts', profile?.userId],
+    queryKey: ['profile-posts', profile?.userId, me?.userId],
     queryFn: () => api<Page<Post>>(`/api/posts/feed/explore?authorId=${profile!.userId}&limit=50`),
     enabled: !!profile,
   });

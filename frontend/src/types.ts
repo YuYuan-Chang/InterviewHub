@@ -38,6 +38,23 @@ export interface Post {
   createdAt: string;
   author: AuthorSummary | null;
   viewerHasUpvoted: boolean;
+  viewerHasSaved: boolean;
+}
+
+export interface Collection {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  resourceCount: number;
+}
+
+export interface SavedResource {
+  post: Post;
+  savedAt: string;
+  notes: string;
+  reviewed: boolean;
+  collectionIds: string[];
 }
 
 export interface CommentNode {

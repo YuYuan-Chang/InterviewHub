@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, getTokens, setTokens } from './api';
 import type { Profile } from './types';
 
@@ -23,6 +24,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [me, setMe] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api<{ accessToken: string; refreshToken: string }>('/api/auth/login', {
       body: { email, password },
     });
+    queryClient.clear();
     setTokens(res);
     await reloadMe();
   }
@@ -54,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api<{ accessToken: string; refreshToken: string }>('/api/auth/register', {
       body: input,
     });
+    queryClient.clear();
     setTokens(res);
     await reloadMe();
   }
@@ -62,6 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tokens = getTokens();
     if (tokens) void api('/api/auth/logout', { body: { refreshToken: tokens.refreshToken } }).catch(() => {});
     setTokens(null);
+    queryClient.clear();
     setMe(null);
   }
 

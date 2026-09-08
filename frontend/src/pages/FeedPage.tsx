@@ -14,7 +14,7 @@ export function FeedPage({ mode }: { mode: 'explore' | 'following' }) {
   const tags = params.get('tags') ?? '';
 
   const query = useInfiniteQuery({
-    queryKey: ['feed', mode, sort, tags],
+    queryKey: ['feed', mode, sort, tags, me?.userId],
     queryFn: ({ pageParam }) => {
       const qs = new URLSearchParams({ sort });
       if (tags) qs.set('tags', tags);

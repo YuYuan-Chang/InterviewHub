@@ -7,6 +7,8 @@
  * A sees it in Following feed → A upvotes & comments → B replies →
  * notifications land → explore feed sorts/filters → oversized upload is rejected.
  */
+import { testSavedResources } from './smoke-saved-resources.mjs';
+
 const BASE = process.env.BASE_URL ?? 'http://localhost:8080';
 const run = Date.now().toString(36);
 
@@ -399,6 +401,8 @@ async function main() {
 
   const anonDl = await fetch(`${BASE}/api/files/${upload.data.id}/download`);
   check('anonymous download rejected with 401', anonDl.status === 401, `got ${anonDl.status}`);
+
+  await testSavedResources({ api, check, alice, bob, post: post.data, post2: post2.data });
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

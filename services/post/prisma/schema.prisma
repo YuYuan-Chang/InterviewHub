@@ -26,6 +26,7 @@ model Post {
   commentCount Int            @default(0) @map("comment_count")
   createdAt    DateTime       @default(now()) @map("created_at")
   reactions    PostReaction[]
+  savedResources SavedResource[]
 
   @@index([authorId])
   @@index([createdAt(sort: Desc)])
@@ -43,4 +44,45 @@ model PostReaction {
   @@id([postId, userId])
   @@index([userId])
   @@map("post_reactions")
+}
+
+model SavedResource {
+  userId      String                      @map("user_id")
+  postId      String                      @map("post_id")
+  savedAt     DateTime                    @default(now()) @map("saved_at")
+  notes       String                      @default("")
+  reviewed    Boolean                     @default(false)
+  post        Post                        @relation(fields: [postId], references: [id], onDelete: Cascade)
+  memberships SavedCollectionMembership[]
+
+  @@id([userId, postId])
+  @@index([userId, savedAt(sort: Desc), postId(sort: Desc)])
+  @@index([userId, reviewed, savedAt(sort: Desc), postId(sort: Desc)])
+  @@index([postId])
+  @@map("saved_resources")
+}
+
+model SavedCollection {
+  id        String                      @id @default(uuid())
+  userId    String                      @map("user_id")
+  name      String                      @db.VarChar(80)
+  createdAt DateTime                    @default(now()) @map("created_at")
+  updatedAt DateTime                    @updatedAt @map("updated_at")
+  resources SavedCollectionMembership[]
+
+  @@unique([userId, name])
+  @@unique([id, userId])
+  @@map("saved_collections")
+}
+
+model SavedCollectionMembership {
+  collectionId String          @map("collection_id")
+  userId       String          @map("user_id")
+  postId       String          @map("post_id")
+  collection   SavedCollection @relation(fields: [collectionId, userId], references: [id, userId], onDelete: Cascade)
+  resource     SavedResource   @relation(fields: [userId, postId], references: [userId, postId], onDelete: Cascade)
+
+  @@id([collectionId, userId, postId])
+  @@index([userId, postId])
+  @@map("saved_collection_memberships")
 }

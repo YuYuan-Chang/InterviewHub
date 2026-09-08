@@ -26,6 +26,7 @@ export interface EnrichedPost extends Omit<Post, 'createdAt' | 'attachments'> {
   attachments: AttachmentMeta[];
   author: AuthorSummary | null;
   viewerHasUpvoted: boolean;
+  viewerHasSaved: boolean;
 }
 
 /** New posts store attachments as JSON; legacy rows get their single file synthesized in. */
@@ -50,7 +51,7 @@ export async function enrichPosts(posts: Post[], viewerId?: string): Promise<Enr
   if (posts.length === 0) return [];
   const authorIds = [...new Set(posts.map((p) => p.authorId))];
 
-  const [profilesRes, reactions] = await Promise.all([
+  const [profilesRes, reactions, saves] = await Promise.all([
     userService
       .post<{ profiles: AuthorSummary[] }>('/internal/profiles/batch', { ids: authorIds })
       .catch((err) => {
@@ -64,10 +65,17 @@ export async function enrichPosts(posts: Post[], viewerId?: string): Promise<Enr
           select: { postId: true },
         })
       : Promise.resolve([]),
+    viewerId
+      ? prisma.savedResource.findMany({
+          where: { userId: viewerId, postId: { in: posts.map((p) => p.id) } },
+          select: { postId: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const authorsById = new Map(profilesRes.profiles.map((p) => [p.userId, p]));
   const upvoted = new Set(reactions.map((r) => r.postId));
+  const saved = new Set(saves.map((r) => r.postId));
 
   return posts.map((p) => ({
     ...p,
@@ -75,5 +83,6 @@ export async function enrichPosts(posts: Post[], viewerId?: string): Promise<Enr
     attachments: attachmentsOf(p),
     author: authorsById.get(p.authorId) ?? null,
     viewerHasUpvoted: upvoted.has(p.id),
+    viewerHasSaved: saved.has(p.id),
   }));
 }
