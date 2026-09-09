@@ -10,6 +10,15 @@ const deltaSchema = z.object({ delta: z.union([z.literal(1), z.literal(-1)]) });
 export const internalRouter: Router = Router();
 internalRouter.use('/internal', requireInternal(config.internalToken));
 
+internalRouter.get('/internal/collections/:id', async (req, res) => {
+  const collection = await prisma.collection.findUnique({
+    where: { id: param(req, 'id') },
+    select: { id: true, ownerId: true },
+  });
+  if (!collection) throw new HttpError(404, 'Collection not found');
+  res.json(collection);
+});
+
 // comment-service asks who wrote a post (to notify) and that it exists
 internalRouter.get('/internal/posts/:id', async (req, res) => {
   const post = await prisma.post.findUnique({

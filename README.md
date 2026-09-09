@@ -68,6 +68,7 @@ Run that once after cloning, and re-run `npm run generate` after any `schema.pri
 
 ## What you can do in the app
 
+- **Personal preparation dashboard** — open My prep to create private company/role/topic plans, link your study collections, manage dated checklists with progress, and schedule interviews. Track upcoming and past/completed/cancelled interviews in your local timezone. Plans persist across devices; deleting a plan removes its tasks and interviews while preserving collections.
 - **Accounts & profiles** — register/login with JWT auth (RS256); profile carries school, target roles, bio, avatar
 - **Follow system** — follow/unfollow, with follower/following counts and lists
 - **File sharing** — PDF/notes uploads up to 10MB, with title, description, and tags (role, topic, company)

@@ -1468,7 +1468,11 @@ h1 {
     flex-wrap: wrap;
   }
   .primary-nav {
-    display: none;
+    display: flex;
+    order: 4;
+    flex-basis: 100%;
+    gap: 1.25rem;
+    flex-wrap: wrap;
   }
   .discovery-layout {
     grid-template-columns: minmax(0, 1fr) 250px;
@@ -1801,4 +1805,37 @@ select:focus-visible, .experience-filters input:focus-visible {
 }
 .collection-edit label {
   margin-top: 8px;
+}
+
+/* Private preparation workspace */
+.prep-heading, .prep-actions, .prep-form-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.prep-heading { justify-content: space-between; margin-bottom: 1.5rem; }
+.prep-heading h1 { margin: .25rem 0; }
+.prep-layout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 1.5rem; align-items: start; }
+.prep-dashboard h2 { font-size: 1.2rem; }
+.prep-dashboard h3 { overflow-wrap: anywhere; }
+.prep-dashboard .card { margin-bottom: 1rem; }
+.prep-actions { margin-top: .8rem; }
+.prep-progress { display: flex; gap: .75rem; align-items: center; margin: 1rem 0; flex-wrap: wrap; }
+.prep-progress progress { flex: 1; min-width: 100px; height: .65rem; accent-color: var(--accent, #2563eb); }
+.prep-progress span { font-size: .85rem; }
+.prep-form { display: grid; gap: .85rem; margin: 1rem 0; }
+.prep-form label { display: grid; gap: .35rem; flex: 1; min-width: 0; }
+.prep-form input, .prep-form select, .prep-form textarea {
+  width: 100%; box-sizing: border-box; padding: .65rem .75rem;
+  border: 1px solid var(--border, #e2e8f0); border-radius: 8px;
+  background: white; color: inherit; font: inherit; min-width: 0;
+}
+.prep-form textarea { min-height: 90px; }
+.prep-task, .prep-interview { padding: 1rem 0; border-bottom: 1px solid var(--border, #e2e8f0); overflow-wrap: anywhere; }
+.prep-check { display: flex; gap: .7rem; align-items: baseline; }
+.prep-check input { width: auto; flex-shrink: 0; }
+.prep-done { text-decoration: line-through; opacity: .65; }
+.prep-notes { white-space: pre-wrap; }
+.prep-contents { border-top: 1px solid var(--border, #e2e8f0); margin-top: 1rem; }
+.prep-schedule { position: sticky; top: 1rem; }
+@media (max-width: 800px) {
+  .prep-layout { grid-template-columns: minmax(0, 1fr); }
+  .prep-schedule { position: static; }
+  .prep-form-row { flex-direction: column; align-items: stretch; }
 }

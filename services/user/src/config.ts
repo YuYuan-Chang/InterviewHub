@@ -9,4 +9,5 @@ export const config = {
   internalToken: requiredEnv('INTERNAL_TOKEN'),
   kafkaBrokers: envOr('KAFKA_BROKERS', 'localhost:9092'),
   fileServiceUrl: envOr('FILE_SERVICE_URL', 'http://localhost:4004'),
+  postServiceUrl: envOr('POST_SERVICE_URL', 'http://localhost:4003'),
 };

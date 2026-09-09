@@ -54,3 +54,47 @@ model RateLimit {
   @@index([expiresAt])
   @@map("rate_limits")
 }
+
+model PreparationPlan {
+  id           String @id @default(uuid())
+  ownerId      String @map("owner_id")
+  name         String
+  company      String @default("")
+  role         String @default("")
+  collectionId String? @map("collection_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  tasks        PreparationTask[]
+  interviews   PreparationInterview[]
+
+  @@index([ownerId, createdAt, id])
+  @@map("preparation_plans")
+}
+
+model PreparationTask {
+  id        String @id @default(uuid())
+  planId    String @map("plan_id")
+  title     String
+  dueDate   String? @map("due_date")
+  completed Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  plan      PreparationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, createdAt, id])
+  @@map("preparation_tasks")
+}
+
+model PreparationInterview {
+  id          String @id @default(uuid())
+  planId      String @map("plan_id")
+  stage       String
+  scheduledAt DateTime @map("scheduled_at")
+  notes       String @default("")
+  status      String @default("scheduled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  plan        PreparationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, scheduledAt, id])
+  @@index([status, scheduledAt, id])
+  @@map("preparation_interviews")
+}

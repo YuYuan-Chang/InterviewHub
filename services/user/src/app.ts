@@ -14,6 +14,7 @@ import { prisma } from './db';
 import { profilesRouter } from './profiles';
 import { followsRouter } from './follows/routes';
 import { internalRouter } from './internal';
+import { preparationRouter } from './preparation/routes';
 
 export function buildApp(): express.Express {
   const app = express();
@@ -27,6 +28,7 @@ export function buildApp(): express.Express {
     await prisma.$queryRaw`SELECT 1`;
   });
   app.use(profilesRouter);
+  app.use(preparationRouter);
   app.use(followsRouter);
   app.use(internalRouter);
   app.use(notFoundHandler);

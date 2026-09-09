@@ -7,6 +7,8 @@
  * A sees it in Following feed → A upvotes & comments → B replies →
  * notifications land → explore feed sorts/filters → oversized upload is rejected.
  */
+import { preparationSmoke } from './preparation-smoke.mjs';
+
 const BASE = process.env.BASE_URL ?? 'http://localhost:8080';
 const run = Date.now().toString(36);
 
@@ -527,6 +529,9 @@ async function main() {
     collection.status === 201 && collection.data.name === 'System design' && collection.data.isPrivate === true,
     JSON.stringify(collection.data),
   );
+  console.log('— personal preparation dashboard');
+  await preparationSmoke(api, check, alice, bob, collection.data.id);
+
   const dupCollection = await api('/api/collections', {
     method: 'POST',
     token: alice.accessToken,
