@@ -37,6 +37,7 @@ export function Navbar() {
       </Link>
       <nav className="primary-nav" aria-label="Main navigation">
         <NavLink to="/" end>Explore</NavLink>
+        {me && <NavLink to="/dashboard">My prep</NavLink>}
         {me && <NavLink to="/following">Following</NavLink>}
         {me && <NavLink to="/saved">Saved</NavLink>}
       </nav>

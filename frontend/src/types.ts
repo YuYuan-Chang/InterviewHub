@@ -107,3 +107,35 @@ export interface ResumeRevision {
   resolvedAt: string | null;
   author: AuthorSummary | null;
 }
+
+export interface PreparationPlan {
+  id: string;
+  name: string;
+  company: string;
+  role: string;
+  collectionId: string | null;
+  totalTasks: number;
+  completedTasks: number;
+}
+export interface PreparationTask {
+  id: string;
+  planId: string;
+  title: string;
+  dueDate: string | null;
+  completed: boolean;
+}
+export interface PreparationInterview {
+  id: string;
+  planId: string;
+  stage: keyof typeof import('./interview').INTERVIEW_STAGES;
+  scheduledAt: string;
+  notes: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  plan?: { name: string };
+}
+export interface PreparationSummary {
+  planCount: number;
+  totalTasks: number;
+  completedTasks: number;
+  nextInterview: PreparationInterview | null;
+}

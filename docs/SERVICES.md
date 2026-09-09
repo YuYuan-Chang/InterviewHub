@@ -414,3 +414,26 @@ Both hot queries are pure index scans. No FKs anywhere (all four ids reference o
 | **notification** | profile batch *(d)* | — | — | — |
 
 **Remaining gaps:** user-search N+1 (≤61 queries) · comment threads capped at 500 with no pagination · `unreadOnly=false` coercion bug · stale 415 message in file-service · account deletion doesn't exist.
+
+## Personal preparation (user-service)
+
+Preparation plans, checklist tasks, and interview schedules are private user-service data. All endpoints below start with `/api/users/me/preparation` and require a JWT. Every operation checks the authenticated owner, returning 404 for absent or foreign records. Existing `/api/users` gateway routing covers these endpoints; internal routes remain inaccessible through the gateway.
+
+| Endpoint | Behavior |
+|---|---|
+| `GET /summary` | `{ planCount, totalTasks, completedTasks, nextInterview }` across all the owner's plans |
+| `GET /plans` · `POST /plans` | List / create plans: name (1–120), optional company/role (≤120), nullable collectionId |
+| `GET /plans/:planId` · `PATCH /plans/:planId` · `DELETE /plans/:planId` | Read / edit / delete a plan; deletion cascades tasks and interviews, never the collection |
+| `GET /plans/:planId/tasks` · `POST /plans/:planId/tasks` | List / create tasks: title (1–300), nullable dueDate (`YYYY-MM-DD`), completed (boolean) |
+| `PATCH /plans/:planId/tasks/:taskId` · `DELETE /plans/:planId/tasks/:taskId` | Edit, explicitly complete/reopen, or delete a task |
+| `GET /plans/:planId/interviews` · `POST /plans/:planId/interviews` | List / create interviews: stage, scheduledAt (ISO instant with timezone), notes (≤5000), status |
+| `PATCH /plans/:planId/interviews/:interviewId` · `DELETE /plans/:planId/interviews/:interviewId` | Reschedule, change status/notes/stage, or delete |
+| `GET /interviews?view=upcoming|past` | Upcoming defaults to future scheduled interviews; past includes elapsed scheduled interviews and all completed/cancelled interviews |
+
+Lists return `{ items, nextCursor }`, accept cursor/limit (default 20, max 50), and order ascending by createdAt (plans/tasks) or scheduledAt (interviews), then ID. Plan DTOs include totalTasks and completedTasks across the entire checklist. PATCH accepts partial create fields. Interview stages match public experience stages; statuses are scheduled/completed/cancelled. Interview instants are UTC, displayed and entered in the browser timezone. Task deadlines are timezone-independent calendar dates.
+
+Tables: `preparation_plans` (owner and createdAt/ID index), `preparation_tasks` (plan and createdAt/ID index), `preparation_interviews` (plan and scheduledAt/ID index; status and scheduledAt/ID index). Child tables have local cascading foreign keys. Collection IDs are opaque cross-service references, never database joins.
+
+When a new collection is linked, user-service calls protected post-service `GET /internal/collections/:id` returning `{ id, ownerId }`. Another owner's collection returns 404 to the caller. Set `POST_SERVICE_URL` in user-service configuration (already supplied by Compose and Kubernetes). Only changed non-null collection links require post-service availability; task/interview writes, unlinks, and unrelated plan updates remain independent. Deleted collection references may remain until the owner replaces/unlinks them; the UI resolves current collection labels through `/api/collections` and displays missing references as unavailable.
+
+Migration: `services/user/prisma/migrations/4_preparation`. Apply with `npx prisma migrate deploy --schema services/user/prisma/schema.prisma` using the user database configuration, then run `npm run generate`. Container startup applies versioned migrations automatically.
