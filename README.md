@@ -68,6 +68,10 @@ Run that once after cloning, and re-run `npm run generate` after any `schema.pri
 
 ## What you can do in the app
 
+- **Interview preparation workspaces** — open any plan from My prep for a dedicated private workspace at `/dashboard/plans/:planId`. Overview stores the job posting, description, and preparation notes; Tasks and Interviews retain the checklist and local-time scheduling flow. Resources manages posts in the plan's linked collection (changes also affect that collection). Questions stores private prompts, draft answers, and New/Practicing/Ready progress with filtering. Tabs are linkable through `?tab=overview|tasks|resources|questions|interviews`. Existing plans work immediately with empty optional details. Deleting a plan also deletes its questions, while linked collections remain intact.
+
+The additive user-service migration `5_preparation_workspace` runs at container startup. For local service development, deploy versioned migrations with `npx prisma migrate deploy --schema services/user/prisma/schema.prisma` using the user database configuration, then run `npm run generate`.
+
 - **Personal preparation dashboard** — open My prep to create private company/role/topic plans, link your study collections, manage dated checklists with progress, and schedule interviews. Track upcoming and past/completed/cancelled interviews in your local timezone. Plans persist across devices; deleting a plan removes its tasks and interviews while preserving collections.
 - **Accounts & profiles** — register/login with JWT auth (RS256); profile carries school, target roles, bio, avatar
 - **Follow system** — follow/unfollow, with follower/following counts and lists

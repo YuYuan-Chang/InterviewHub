@@ -6,6 +6,21 @@ export const planSchema = z.object({
   name: text(120),
   company: z.string().trim().max(120).default(''),
   role: z.string().trim().max(120).default(''),
+  jobUrl: z
+    .string()
+    .trim()
+    .max(2000)
+    .refine((value) => {
+      if (!value) return true;
+      try {
+        return ['http:', 'https:'].includes(new URL(value).protocol);
+      } catch {
+        return false;
+      }
+    }, 'Use an HTTP or HTTPS URL')
+    .default(''),
+  jobDescription: z.string().trim().max(20000).default(''),
+  notes: z.string().trim().max(10000).default(''),
   collectionId: z.string().uuid().nullable().default(null),
 });
 export const taskSchema = z.object({
@@ -15,7 +30,10 @@ export const taskSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .refine((value) => {
       const date = new Date(`${value}T00:00:00Z`);
-      return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+      return (
+        Number.isFinite(date.getTime()) &&
+        date.toISOString().slice(0, 10) === value
+      );
     }, 'Invalid calendar date')
     .nullable()
     .default(null),
@@ -40,18 +58,43 @@ export const listSchema = z.object({
   limit: z.coerce.number().int().positive().optional(),
   view: z.enum(['upcoming', 'past']).optional(),
 });
-export function cursorWhere(cursor: string | undefined, field: 'createdAt' | 'scheduledAt') {
+export const questionSchema = z.object({
+  prompt: text(5000),
+  answer: z.string().trim().max(20000).default(''),
+  readiness: z.enum(['new', 'practicing', 'ready']).default('new'),
+});
+export const questionListSchema = listSchema.extend({
+  readiness: z.enum(['new', 'practicing', 'ready']).optional(),
+});
+export function cursorWhere(
+  cursor: string | undefined,
+  field: 'createdAt' | 'scheduledAt',
+) {
   const raw = decodeCursor(cursor);
   if (raw === undefined) return {};
   const parsed = z
-    .object({ id: z.string().uuid(), time: z.string().datetime(), field: z.literal(field) })
+    .object({
+      id: z.string().uuid(),
+      time: z.string().datetime(),
+      field: z.literal(field),
+    })
     .safeParse(raw);
   if (!parsed.success) throw new HttpError(400, 'Malformed cursor');
   const time = new Date(parsed.data.time);
-  return { OR: [{ [field]: { gt: time } }, { [field]: time, id: { gt: parsed.data.id } }] };
+  return {
+    OR: [
+      { [field]: { gt: time } },
+      { [field]: time, id: { gt: parsed.data.id } },
+    ],
+  };
 }
 export function scheduleWhere(view: 'upcoming' | 'past', now: Date) {
   return view === 'upcoming'
     ? { status: 'scheduled', scheduledAt: { gte: now } }
-    : { OR: [{ scheduledAt: { lt: now } }, { status: { in: ['completed', 'cancelled'] } }] };
+    : {
+        OR: [
+          { scheduledAt: { lt: now } },
+          { status: { in: ['completed', 'cancelled'] } },
+        ],
+      };
 }

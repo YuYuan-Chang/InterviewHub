@@ -23,7 +23,7 @@ export function buildApp(): express.Express {
   app.use(requestLogging(logger));
   installMetrics(app, 'user-service');
   app.use('/api', rateLimit(prisma, 'api', config.apiRateLimit, 60_000));
-  app.use(express.json({ limit: '100kb' }));
+  app.use(express.json({ limit: '256kb' }));
   healthRoutes(app, async () => {
     await prisma.$queryRaw`SELECT 1`;
   });

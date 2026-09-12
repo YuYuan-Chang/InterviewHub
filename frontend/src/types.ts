@@ -109,6 +109,9 @@ export interface ResumeRevision {
 }
 
 export interface PreparationPlan {
+  jobUrl: string;
+  jobDescription: string;
+  notes: string;
   id: string;
   name: string;
   company: string;
@@ -116,6 +119,15 @@ export interface PreparationPlan {
   collectionId: string | null;
   totalTasks: number;
   completedTasks: number;
+}
+export interface PreparationQuestion {
+  id: string;
+  planId: string;
+  prompt: string;
+  answer: string;
+  readiness: 'new' | 'practicing' | 'ready';
+  createdAt: string;
+  updatedAt: string;
 }
 export interface PreparationTask {
   id: string;
