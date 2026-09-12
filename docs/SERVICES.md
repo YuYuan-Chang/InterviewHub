@@ -91,6 +91,21 @@ Prisma models `User` / `RefreshToken` map 1:1 (camelCase fields `@map`-ed to sna
 
 ## 2 · user-service
 
+### Private interview preparation workspace
+
+User-service owns preparation plans, tasks, interviews, and private practice questions. Existing plan APIs under `/api/users/me/preparation/plans` now accept and return `jobUrl` (HTTP/HTTPS or empty, ≤2,000 characters), `jobDescription` (≤20,000), and `notes` (≤10,000), each defaulting to empty on creation. Partial updates preserve omitted fields. The JSON body limit is 256 KB to accommodate Unicode descriptions and notes.
+
+| Endpoint | Behavior |
+|---|---|
+| `GET /api/users/me/preparation/plans/:planId/questions` | Owner-only cursor-paginated `{ items, nextCursor, totals: { new, practicing, ready } }`; optional `readiness=new|practicing|ready`. Totals cover the entire plan, independent of the filter/page. |
+| `POST /api/users/me/preparation/plans/:planId/questions` | Creates a question: required trimmed nonblank `prompt` (≤5,000), optional `answer` (≤20,000, default empty), `readiness` (default `new`); returns 201. |
+| `PATCH /api/users/me/preparation/plans/:planId/questions/:questionId` | Updates supplied question fields only; returns the updated question. |
+| `DELETE /api/users/me/preparation/plans/:planId/questions/:questionId` | Deletes the question; returns 204. |
+
+All routes require JWT authentication. Foreign/missing plans and questions return 404; invalid input returns 400. Questions include IDs, `planId`, content, readiness, and creation/update timestamps. Pagination orders by `(createdAt, id)` ascending and uses existing preparation cursors. `preparation_questions` references its plan with cascading deletion and a `(plan_id, created_at, id)` index. Migration `5_preparation_workspace` is additive and preserves existing plans and collection IDs.
+
+Collection content remains owned by post-service. The workspace uses existing authenticated collection/bookmark APIs; plan linkage continues to validate collection ownership through the protected internal API. Linking/unlinking does not copy or delete posts. Resource outages do not block private preparation features.
+
 `services/user` · port **4002** · database **user_db** · profiles **and** the follow graph
 
 ### 2.1 Purpose & responsibility

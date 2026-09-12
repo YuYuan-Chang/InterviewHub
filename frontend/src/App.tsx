@@ -13,6 +13,7 @@ import { EditProfilePage } from './pages/EditProfilePage';
 import { SavedPage } from './pages/SavedPage';
 import { CollectionPage } from './pages/CollectionPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { PreparationWorkspacePage } from './pages/PreparationWorkspacePage';
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const { me, loading } = useAuth();
@@ -30,6 +31,7 @@ export function App() {
         <Routes>
           <Route path="/" element={<FeedPage mode="explore" />} />
           <Route path="/dashboard" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+          <Route path="/dashboard/plans/:planId" element={<RequireAuth><PreparationWorkspacePage /></RequireAuth>} />
           <Route path="/following" element={<RequireAuth><FeedPage mode="following" /></RequireAuth>} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

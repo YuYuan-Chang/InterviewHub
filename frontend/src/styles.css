@@ -1832,6 +1832,13 @@ select:focus-visible, .experience-filters input:focus-visible {
 .prep-check input { width: auto; flex-shrink: 0; }
 .prep-done { text-decoration: line-through; opacity: .65; }
 .prep-notes { white-space: pre-wrap; }
+.prep-workspace { display: grid; gap: 1rem; }
+.prep-workspace h1, .prep-workspace h3, .workspace-panel { overflow-wrap: anywhere; min-width: 0; }
+.workspace-tabs { display: flex; flex-wrap: wrap; gap: .35rem; }
+.workspace-tabs [aria-current="page"] { background: var(--accent, #2563eb); color: white; }
+.workspace-question { padding: 1rem 0; border-bottom: 1px solid var(--border, #e2e8f0); margin-bottom: 1rem; }
+.workspace-resource { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; padding: .5rem 0; }
+.prep-workspace button:focus-visible, .prep-workspace a:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 3px; }
 .prep-contents { border-top: 1px solid var(--border, #e2e8f0); margin-top: 1rem; }
 .prep-schedule { position: sticky; top: 1rem; }
 @media (max-width: 800px) {

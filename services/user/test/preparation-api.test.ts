@@ -3,6 +3,14 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { db, remote } = vi.hoisted(() => ({
   db: {
+    preparationQuestion: {
+      findMany: vi.fn(),
+      groupBy: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
+      findFirst: vi.fn(),
+      deleteMany: vi.fn(),
+    },
     preparationPlan: {
       findFirst: vi.fn(),
       findMany: vi.fn(),
@@ -32,18 +40,30 @@ const { db, remote } = vi.hoisted(() => ({
 }));
 vi.mock('../src/db', () => ({ prisma: db }));
 vi.mock('../src/config', () => ({
-  config: { jwtPublicKey: 'test', postServiceUrl: 'http://post', internalToken: 'internal' },
+  config: {
+    jwtPublicKey: 'test',
+    postServiceUrl: 'http://post',
+    internalToken: 'internal',
+  },
 }));
 vi.mock('@interviewhub/shared', async (original) => ({
   ...(await original<typeof import('@interviewhub/shared')>()),
-  requireAuth: () => (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (!req.headers.authorization) {
-      res.status(401).end();
-      return;
-    }
-    req.user = { id: req.headers.authorization } as typeof req.user;
-    next();
-  },
+  // Load validation through Vitest too, so schemas and ZodError share the same module instance.
+  ...(await import('../../../packages/shared/src/validate')),
+  requireAuth:
+    () =>
+    (
+      req: express.Request,
+      res: express.Response,
+      next: express.NextFunction,
+    ) => {
+      if (!req.headers.authorization) {
+        res.status(401).end();
+        return;
+      }
+      req.user = { id: req.headers.authorization } as typeof req.user;
+      next();
+    },
   s2sClient: () => ({ get: remote }),
 }));
 import { preparationRouter } from '../src/preparation/routes';
@@ -61,23 +81,153 @@ app.use(
 );
 const base = '/api/users/me/preparation';
 const id = '3f1a2b4c-5d6e-4f70-8a91-b2c3d4e5f607';
-const plan = { id, ownerId: 'alice', name: 'Prep', collectionId: id, createdAt: new Date() };
+const plan = {
+  id,
+  ownerId: 'alice',
+  name: 'Prep',
+  collectionId: id,
+  createdAt: new Date(),
+};
 beforeEach(() => {
   vi.resetAllMocks();
   db.preparationPlan.findFirst.mockResolvedValue(plan);
   db.preparationTask.groupBy.mockResolvedValue([]);
 });
 describe('private preparation API', () => {
+  it('paginates filtered questions and returns totals across all readiness levels', async () => {
+    const second = '4f1a2b4c-5d6e-4f70-8a91-b2c3d4e5f607';
+    db.preparationQuestion.findMany.mockResolvedValue([
+      { id, createdAt: new Date(), readiness: 'ready' },
+      { id: second },
+    ]);
+    db.preparationQuestion.groupBy.mockResolvedValue([
+      { readiness: 'ready', _count: { _all: 2 } },
+      { readiness: 'new', _count: { _all: 3 } },
+    ]);
+    const res = await request(app)
+      .get(`${base}/plans/${id}/questions?limit=1&readiness=ready`)
+      .set('authorization', 'alice');
+    expect(res.status).toBe(200);
+    expect(res.body.items).toHaveLength(1);
+    expect(res.body.nextCursor).toBeTruthy();
+    expect(res.body.totals).toEqual({ new: 3, practicing: 0, ready: 2 });
+    expect(db.preparationQuestion.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { planId: id, readiness: 'ready' },
+        take: 2,
+      }),
+    );
+    expect(db.preparationQuestion.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { planId: id } }),
+    );
+    await request(app)
+      .get(`${base}/plans/${id}/questions?cursor=${res.body.nextCursor}`)
+      .set('authorization', 'alice');
+    expect(db.preparationQuestion.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ OR: expect.any(Array) }),
+      }),
+    );
+  });
+  it('creates questions with defaults and updates answers without resetting readiness', async () => {
+    db.preparationQuestion.create.mockResolvedValue({
+      id,
+      prompt: 'Why?',
+      answer: '',
+      readiness: 'new',
+    });
+    const created = await request(app)
+      .post(`${base}/plans/${id}/questions`)
+      .set('authorization', 'alice')
+      .send({ prompt: 'Why?' });
+    expect(created.status).toBe(201);
+    expect(db.preparationQuestion.create).toHaveBeenCalledWith({
+      data: { planId: id, prompt: 'Why?', answer: '', readiness: 'new' },
+    });
+    db.preparationQuestion.updateMany.mockResolvedValue({ count: 1 });
+    db.preparationQuestion.findFirst.mockResolvedValue({
+      id,
+      answer: 'My answer',
+      readiness: 'ready',
+    });
+    const updated = await request(app)
+      .patch(`${base}/plans/${id}/questions/${id}`)
+      .set('authorization', 'alice')
+      .send({ answer: 'My answer' });
+    expect(updated.body.readiness).toBe('ready');
+    expect(db.preparationQuestion.updateMany).toHaveBeenCalledWith({
+      where: { id, planId: id, plan: { ownerId: 'alice' } },
+      data: { answer: 'My answer' },
+    });
+    db.preparationQuestion.deleteMany.mockResolvedValue({ count: 1 });
+    expect(
+      (
+        await request(app)
+          .delete(`${base}/plans/${id}/questions/${id}`)
+          .set('authorization', 'alice')
+      ).status,
+    ).toBe(204);
+  });
+  it('denies foreign question access and scopes writes to the owner and parent', async () => {
+    db.preparationPlan.findFirst.mockResolvedValue(null);
+    for (const method of ['get', 'post'] as const) {
+      expect(
+        (
+          await request(app)
+            [method](`${base}/plans/${id}/questions`)
+            .set('authorization', 'bob')
+            .send(method === 'post' ? { prompt: 'Intruder' } : undefined)
+        ).status,
+      ).toBe(404);
+    }
+    expect(db.preparationQuestion.findMany).not.toHaveBeenCalled();
+    expect(db.preparationQuestion.create).not.toHaveBeenCalled();
+    db.preparationQuestion.updateMany.mockResolvedValue({ count: 0 });
+    db.preparationQuestion.deleteMany.mockResolvedValue({ count: 0 });
+    expect(
+      (
+        await request(app)
+          .patch(`${base}/plans/${id}/questions/${id}`)
+          .set('authorization', 'bob')
+          .send({ readiness: 'ready' })
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await request(app)
+          .delete(`${base}/plans/${id}/questions/${id}`)
+          .set('authorization', 'bob')
+      ).status,
+    ).toBe(404);
+    expect(db.preparationQuestion.deleteMany).toHaveBeenCalledWith({
+      where: { id, planId: id, plan: { ownerId: 'bob' } },
+    });
+  });
+  it('rejects malformed question filters and cursors before loading rows', async () => {
+    for (const query of ['readiness=unknown', 'cursor=garbage']) {
+      const response = await request(app)
+        .get(`${base}/plans/${id}/questions?${query}`)
+        .set('authorization', 'alice');
+      expect(response.status, JSON.stringify(response.body)).toBe(400);
+    }
+    expect(db.preparationQuestion.findMany).not.toHaveBeenCalled();
+  });
   it('guards all preparation routes before database access', async () => {
     expect((await request(app).get(`${base}/summary`)).status).toBe(401);
     expect(db.preparationPlan.count).not.toHaveBeenCalled();
   });
   it('returns 404 for a plan outside the owner scope', async () => {
     db.preparationPlan.findFirst.mockResolvedValue(null);
-    expect((await request(app).get(`${base}/plans/${id}`).set('authorization', 'bob')).status).toBe(
-      404,
-    );
-    expect(db.preparationPlan.findFirst).toHaveBeenCalledWith({ where: { id, ownerId: 'bob' } });
+    expect(
+      (
+        await request(app)
+          .get(`${base}/plans/${id}`)
+          .set('authorization', 'bob')
+      ).status,
+    ).toBe(404);
+    expect(db.preparationPlan.findFirst).toHaveBeenCalledWith({
+      where: { id, ownerId: 'bob' },
+    });
   });
   it('returns complete counts for a paginated plan list without loading task rows', async () => {
     db.preparationPlan.findMany.mockResolvedValue([plan]);
@@ -85,8 +235,13 @@ describe('private preparation API', () => {
       { planId: id, completed: true, _count: { _all: 3 } },
       { planId: id, completed: false, _count: { _all: 8 } },
     ]);
-    const res = await request(app).get(`${base}/plans?limit=1`).set('authorization', 'alice');
-    expect(res.body.items[0]).toMatchObject({ totalTasks: 11, completedTasks: 3 });
+    const res = await request(app)
+      .get(`${base}/plans?limit=1`)
+      .set('authorization', 'alice');
+    expect(res.body.items[0]).toMatchObject({
+      totalTasks: 11,
+      completedTasks: 3,
+    });
     expect(db.preparationTask.findMany).not.toHaveBeenCalled();
   });
   it('requires collection ownership before creating a linked plan', async () => {
@@ -100,7 +255,9 @@ describe('private preparation API', () => {
   });
   it('propagates collection lookup failure without creating an invalid link', async () => {
     remote.mockRejectedValue(
-      Object.assign(new Error('Collection service unavailable'), { status: 502 }),
+      Object.assign(new Error('Collection service unavailable'), {
+        status: 502,
+      }),
     );
     const res = await request(app)
       .post(`${base}/plans`)

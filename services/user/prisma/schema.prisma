@@ -62,13 +62,31 @@ model PreparationPlan {
   company      String @default("")
   role         String @default("")
   collectionId String? @map("collection_id")
+  jobUrl       String @default("") @map("job_url")
+  jobDescription String @default("") @map("job_description")
+  notes        String @default("")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   tasks        PreparationTask[]
   interviews   PreparationInterview[]
+  questions    PreparationQuestion[]
 
   @@index([ownerId, createdAt, id])
   @@map("preparation_plans")
+}
+
+model PreparationQuestion {
+  id        String @id @default(uuid())
+  planId    String @map("plan_id")
+  prompt    String
+  answer    String @default("")
+  readiness String @default("new")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  plan PreparationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, createdAt, id])
+  @@map("preparation_questions")
 }
 
 model PreparationTask {
