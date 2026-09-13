@@ -37,10 +37,10 @@ for img in auth-service user-service post-service file-service comment-service n
 done
 # preload infra images so the cluster never pulls them from the network
 docker pull postgres:17-alpine >/dev/null 2>&1 || true
-docker pull minio/minio:latest >/dev/null 2>&1 || true
+docker pull quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z >/dev/null 2>&1 || true
 docker pull apache/kafka:3.8.0 >/dev/null 2>&1 || true
 kind load docker-image postgres:17-alpine --name "$CLUSTER"
-kind load docker-image minio/minio:latest --name "$CLUSTER"
+kind load docker-image quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z --name "$CLUSTER"
 kind load docker-image apache/kafka:3.8.0 --name "$CLUSTER"
 
 echo "--- applying manifests"
